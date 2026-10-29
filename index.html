@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buscador de clientes</title>
+<link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet">
+<style>
+  /* Guía visual: SAP Fiori, tema Horizon (sistemas de gestión de grandes empresas).
+     Azul de marca #0070F2, fondo gris claro, tarjetas blancas y estados con color semántico. */
+  :root {
+    --fondo:#f5f6f7; --tarjeta:#ffffff; --borde:#e5e5e5; --borde-campo:#bcc3ca;
+    --texto:#0b1f3a; --texto2:#556b82; --marca:#0070f2; --marca-hover:#0064d9; --marca-suave:#ebf8ff;
+    --positivo:#256f3a; --positivo-bg:#f5fae5; --critico:#e76500; --critico-bg:#fff8d6;
+    --negativo:#aa0808; --negativo-bg:#ffeaf4; --neutro-bg:#eff1f2;
+    --sombra:0 0 0.125rem rgba(34,53,72,.15), 0 0.125rem 0.5rem rgba(34,53,72,.08);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fondo); color:var(--texto); font:14px/1.45 "72", "72full", "Segoe UI", Arial, Helvetica, sans-serif; }
+
+  /* Barra superior (shell bar) */
+  header { background:var(--tarjeta); box-shadow:0 1px 0 var(--borde); }
+  .marca { max-width:1280px; margin:0 auto; height:52px; padding:0 16px; display:flex; align-items:center; gap:12px; }
+  .logo { width:30px; height:30px; border-radius:8px; background:var(--marca); color:#fff; display:grid; place-items:center; font-weight:700; font-size:14px; }
+  header h1 { margin:0; display:flex; align-items:baseline; gap:8px; font-weight:400; }
+  header h1 .wm { font:17px/1 Michroma, "Segoe UI", Arial, sans-serif; letter-spacing:.06em; }
+  header h1 .sub { font-size:10px; letter-spacing:.4em; color:#2f5d8a; }
+  header p { margin:0 0 0 auto; color:var(--texto2); font-size:12px; }
+
+  /* Encabezado de página */
+  .pagina { max-width:1280px; margin:0 auto; padding:24px 16px 0; }
+  .pagina h2 { margin:0; font-size:22px; font-weight:700; letter-spacing:-.01em; }
+  .pagina p { margin:4px 0 0; color:var(--texto2); }
+
+  main { max-width:1280px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
+  .card { background:var(--tarjeta); border-radius:12px; box-shadow:var(--sombra); padding:20px; }
+  .card h2 { margin:0 0 16px; font-size:16px; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .card h2 .num { display:none; }
+  label { font-size:13px; color:var(--texto2); display:inline-block; margin-bottom:4px; }
+  input[type=text], select, textarea { width:100%; height:36px; padding:0 10px; background:#fff; color:var(--texto); border:1px solid var(--borde-campo); border-bottom-color:#556b81; border-radius:4px; font:inherit; }
+  textarea { height:auto; min-height:96px; padding:8px 10px; resize:vertical; }
+  input[type=text]:hover, select:hover, textarea:hover { border-color:var(--marca); background:#f5fafe; }
+  input[type=text]:focus, select:focus, textarea:focus { outline:2px solid var(--marca); outline-offset:1px; }
+  input[type=checkbox] { accent-color:var(--marca); width:16px; height:16px; vertical-align:-3px; margin:0 6px 0 0; }
+  .row { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+  .row > * { flex:1 1 200px; }
+  .atajos { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .atajos button { height:28px; padding:0 12px; font-size:13px; border-radius:14px; }
+  .rubros { display:flex; flex-wrap:wrap; gap:10px 22px; margin:16px 0 12px; padding-top:16px; border-top:1px solid var(--borde); }
+  .rubros label, .chk { color:var(--texto); font-size:14px; margin:0; }
+
+  button { height:36px; padding:0 16px; border:1px solid var(--marca); border-radius:8px; background:var(--marca); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { background:var(--marca-hover); border-color:var(--marca-hover); }
+  button.sec { background:#fff; color:var(--marca); border-color:var(--borde-campo); font-weight:400; }
+  button.sec:hover { background:var(--marca-suave); border-color:var(--marca); }
+  button:disabled { opacity:.5; cursor:wait; }
+
+  #estado:empty { display:none; }
+  #estado { margin-top:14px; padding:10px 12px; border-radius:8px; background:var(--marca-suave); border-left:4px solid var(--marca); font-size:13px; }
+
+  /* Tabla */
+  .tabla { overflow-x:auto; border:1px solid var(--borde); border-radius:8px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--borde); vertical-align:middle; }
+  tbody tr:last-child td { border-bottom:0; }
+  th { font-size:13px; font-weight:600; color:var(--texto2); background:#fafbfc; white-space:nowrap; }
+  tbody tr:hover { background:#f5fafe; }
+  td.idx { color:var(--texto2); font-size:12px; width:1%; }
+  td select { height:30px; width:auto; font-size:13px; font-weight:600; border-radius:6px; border:1px solid transparent; padding:0 6px; background:var(--neutro-bg); color:var(--texto2); }
+  td select.e-Contactado { background:var(--marca-suave); color:#0040b0; }
+  td select.e-Interesado { background:var(--critico-bg); color:#a04600; }
+  td select.e-Cliente { background:var(--positivo-bg); color:var(--positivo); }
+  td select.e-No-le-interesa { background:var(--negativo-bg); color:var(--negativo); }
+  .nombre { font-weight:600; }
+  .sinweb { white-space:nowrap; display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--critico); }
+  .sinweb::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--critico); }
+  a { color:var(--marca); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .acciones { white-space:nowrap; }
+  .acciones a, .acciones button { margin:2px 6px 2px 0; display:inline-flex; align-items:center; height:28px; padding:0 10px; font-size:13px; }
+  .acciones a { border:1px solid var(--borde-campo); border-radius:8px; color:var(--marca); }
+  .acciones a:hover { background:var(--marca-suave); border-color:var(--marca); text-decoration:none; }
+  .nota { font-size:12px; color:var(--texto2); margin:12px 0 0; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { text-align:left; height:auto; padding:12px 14px; background:#fff; color:var(--texto); border:1px solid var(--borde); border-radius:12px; font-weight:400; }
+  .kpi:hover { background:#f5fafe; border-color:var(--marca); }
+  .kpi.activo { border-color:var(--marca); box-shadow:inset 0 -3px 0 var(--marca); }
+  .kpi b { display:block; font-size:26px; line-height:1.1; margin-top:4px; }
+  .kpi span { font-size:12px; color:var(--texto2); }
+  td input.nota-in { height:30px; font-size:13px; min-width:160px; }
+  .fecha { display:block; font-size:11px; color:var(--texto2); margin-top:3px; }
+  .contador { font-size:16px; font-weight:700; margin:20px 0 10px; }
+  @media (max-width:600px) { header p { display:none; } .card { padding:16px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="marca">
+    <svg class="emblema" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><circle cx="46" cy="54" r="40" fill="#0070F2"/><circle cx="56" cy="44" r="36" fill="#0B1F3A"/></svg>
+    <h1><span class="wm">SELENIUM</span> <span class="sub">SYSTEMS</span></h1>
+    <p>Buscador de clientes · datos de OpenStreetMap</p>
+  </div>
+</header>
+<div class="pagina">
+  <h2>Buscador de clientes</h2>
+  <p>Talleres de muebles, carpinterías y mueblerías por zona.</p>
+</div>
+<main>
+
+<section class="card">
+  <h2>Zona y rubros</h2>
+  <div class="row">
+    <div>
+      <label for="zona">Zona (ciudad, provincia o país)</label>
+      <input type="text" id="zona" placeholder="Ej: Córdoba, Argentina · Provincia de Santa Fe · Uruguay">
+    </div>
+    <div style="flex:0 0 auto"><button id="buscar">Buscar</button></div>
+  </div>
+  <div class="atajos" id="atajos"></div>
+  <div class="rubros" id="rubros"></div>
+  <label class="chk"><input type="checkbox" id="soloConNombre" checked> Solo los que tienen nombre</label>
+  <div id="estado"></div>
+  <p class="nota">La lista se guarda en este navegador: usá "Guardar copia" de vez en cuando para no perderla. Ojo: un país entero puede tardar un par de minutos. OpenStreetMap no tiene todos los comercios, sobre todo en pueblos chicos.</p>
+</section>
+
+<section class="card">
+  <h2>Mensaje</h2>
+  <label for="plantilla">Plantilla. Podés usar {nombre}, {ciudad} y {rubro}.</label>
+  <textarea id="plantilla"></textarea>
+  <div class="row" style="margin-top:8px">
+    <div style="flex:0 0 auto"><button class="sec" data-idioma="es">Plantilla en español</button></div>
+    <div style="flex:0 0 auto"><button class="sec" data-idioma="pt">Em português</button></div>
+    <div style="flex:0 0 auto"><button class="sec" data-idioma="en">In English</button></div>
+  </div>
+  <p class="nota">Mandá los mensajes de a uno, revisándolos antes, y de 5 a 10 por día. Si alguien dice que no, marcalo y no le escribas más.</p>
+</section>
+
+<section class="card">
+  <h2>Contactos</h2>
+  <div class="kpis" id="kpis"></div>
+  <div class="row">
+    <div><label for="filtroTexto">Filtrar</label><input type="text" id="filtroTexto" placeholder="Nombre, ciudad…"></div>
+    <div><label for="filtroEstado">Estado</label><select id="filtroEstado"><option value="">Todos</option></select></div>
+    <div style="flex:0 0 auto"><label class="chk"><input type="checkbox" id="filtroSinWeb"> Solo sin web</label></div>
+    <div style="flex:0 0 auto"><button class="sec" id="exportar">Exportar CSV</button></div>
+    <div style="flex:0 0 auto"><button class="sec" id="backup">Guardar copia</button></div>
+    <div style="flex:0 0 auto"><button class="sec" id="restaurar">Cargar copia</button><input type="file" id="archivo" accept=".json" hidden></div>
+    <div style="flex:0 0 auto"><button class="sec" id="borrar">Vaciar lista</button></div>
+  </div>
+  <p class="contador" id="contador"></p>
+  <div class="tabla">
+    <table>
+      <thead><tr><th>#</th><th>Estado</th><th>Nombre</th><th>Rubro</th><th>Ciudad</th><th>Contacto</th><th>Web</th><th>Nota</th><th>Acciones</th></tr></thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+<script>
+// Rubros: cada uno es una etiqueta de OpenStreetMap
+const RUBROS = [
+  { id: 'carpinteria', nombre: 'Carpinterías', tag: ['craft', 'carpenter'] },
+  { id: 'ebanisteria', nombre: 'Fábricas de muebles / ebanistas', tag: ['craft', 'cabinet_maker'] },
+  { id: 'aberturas', nombre: 'Carpintería de obra / aberturas', tag: ['craft', 'joiner'] },
+  { id: 'muebleria', nombre: 'Mueblerías', tag: ['shop', 'furniture'] },
+  { id: 'cocinas', nombre: 'Cocinas a medida', tag: ['shop', 'kitchen'] },
+  { id: 'tapiceria', nombre: 'Tapicerías', tag: ['craft', 'upholsterer'] },
+];
+const ESTADOS = ['Por contactar', 'Contactado', 'Interesado', 'Cliente', 'No le interesa'];
+const PLANTILLAS = {
+  es: 'Hola, ¿qué tal? Soy Felipe, de Selenium Systems. Vi {nombre} en {ciudad} y les quería contar de un sistema de gestión que armé para talleres de muebles: pedidos, clientes, producción, presupuestos en PDF y aviso de entregas, todo desde el celular. Ya lo usa un taller de amoblamientos. ¿Les interesa que les muestre una demo de 10 minutos?',
+  pt: 'Olá, tudo bem? Sou Felipe, da Selenium Systems. Vi {nombre} em {ciudad} e queria apresentar um sistema de gestão que criei para marcenarias: pedidos, clientes, produção, orçamentos em PDF e alertas de entrega, tudo pelo celular. Posso mostrar uma demo de 10 minutos?',
+  en: 'Hi! I\'m Felipe from Selenium Systems. I came across {nombre} in {ciudad} and wanted to tell you about a management system I built for furniture workshops: orders, clients, production, PDF quotes and delivery alerts, all from your phone. Would you like a 10-minute demo?',
+};
+const CLAVE = 'buscador-clientes-v1';
+const SERVIDORES = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+// Atajos de zona: de lo más cercano a lo más amplio
+const ATAJOS = [
+  'Martín Coronado, Tres de Febrero, Buenos Aires, Argentina',
+  'Partido de Tres de Febrero, Buenos Aires, Argentina',
+  'Ciudad Autónoma de Buenos Aires, Argentina',
+  'Provincia de Buenos Aires, Argentina',
+  'Argentina',
+  'Uruguay',
+];
+
+const $ = (id) => document.getElementById(id);
+let datos = cargar();
+
+function cargar() {
+  try { return JSON.parse(localStorage.getItem(CLAVE)) || { leads: {}, plantilla: PLANTILLAS.es }; }
+  catch { return { leads: {}, plantilla: PLANTILLAS.es }; }
+}
+function guardar() {
+  try { localStorage.setItem(CLAVE, JSON.stringify(datos)); } catch { /* sin almacenamiento: sigue andando en memoria */ }
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 1) Convertir el nombre de la zona en un área de OpenStreetMap
+async function buscarZona(texto) {
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(texto);
+  const r = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+  if (!r.ok) throw new Error('No pude buscar la zona (' + r.status + ')');
+  const lista = await r.json();
+  const lugar = lista.find((l) => l.osm_type === 'relation') || lista.find((l) => l.osm_type === 'way');
+  if (lugar) {
+    const base = lugar.osm_type === 'relation' ? 3600000000 : 2400000000;
+    return { filtro: `area(${base + Number(lugar.osm_id)})->.a;`, dentro: '(area.a)', nombre: lugar.display_name };
+  }
+  // Algunos barrios son solo un punto en el mapa: buscamos 4 km a la redonda
+  if (!lista[0]) throw new Error('No encontré esa zona. Probá con "Ciudad, Provincia, País".');
+  return { filtro: '', dentro: `(around:4000,${lista[0].lat},${lista[0].lon})`, nombre: lista[0].display_name + ' (4 km a la redonda)' };
+}
+
+// 2) Pedirle a Overpass los comercios de esos rubros dentro del área
+async function buscarComercios(zona, rubros) {
+  const partes = rubros.map((r) => `nwr["${r.tag[0]}"="${r.tag[1]}"]${zona.dentro};`).join('');
+  const query = `[out:json][timeout:180];${zona.filtro}(${partes});out center tags;`;
+  // Overpass es gratis y a veces está saturado: si un servidor falla, probamos el siguiente
+  for (const servidor of SERVIDORES) {
+    try {
+      const r = await fetch(servidor, { method: 'POST', body: 'data=' + encodeURIComponent(query) });
+      if (r.ok) return (await r.json()).elements || [];
+    } catch { /* sin conexión con este servidor: seguimos */ }
+  }
+  throw new Error('Los servidores de mapas no respondieron. Esperá un minuto y probá de nuevo, o elegí una zona más chica.');
+}
+
+function aLead(el, zona) {
+  const t = el.tags || {};
+  const rubro = RUBROS.find((r) => t[r.tag[0]] === r.tag[1]);
+  const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
+  return {
+    id: el.type + '/' + el.id,
+    nombre: t.name || '',
+    rubro: rubro ? rubro.nombre : '',
+    ciudad: t['addr:city'] || zona.split(',')[0],
+    direccion: [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '),
+    telefono: t.phone || t['contact:phone'] || t['contact:mobile'] || t['contact:whatsapp'] || '',
+    email: t.email || t['contact:email'] || '',
+    web: t.website || t['contact:website'] || '',
+    instagram: t['contact:instagram'] || '',
+    facebook: t['contact:facebook'] || '',
+    lat, lon,
+    estado: ESTADOS[0],
+    nota: '',
+  };
+}
+
+async function buscar() {
+  const zona = $('zona').value.trim();
+  const rubros = RUBROS.filter((r) => $('r-' + r.id).checked);
+  if (!zona) return avisar('Escribí una zona.');
+  if (!rubros.length) return avisar('Elegí al menos un rubro.');
+  $('buscar').disabled = true;
+  try {
+    avisar('Buscando la zona…');
+    const area = await buscarZona(zona);
+    avisar('Buscando comercios en ' + area.nombre + '…');
+    const elementos = await buscarComercios(area, rubros);
+    let nuevos = 0;
+    for (const el of elementos) {
+      const lead = aLead(el, area.nombre);
+      if ($('soloConNombre').checked && !lead.nombre) continue;
+      if (datos.leads[lead.id]) continue; // ya estaba: no pisamos su estado ni su nota
+      datos.leads[lead.id] = lead;
+      nuevos++;
+    }
+    guardar();
+    avisar(`Listo: ${elementos.length} encontrados en ${area.nombre}, ${nuevos} nuevos en tu lista.`);
+    dibujar();
+  } catch (e) {
+    avisar('Error: ' + e.message);
+  } finally {
+    $('buscar').disabled = false;
+  }
+}
+
+function avisar(texto) { $('estado').textContent = texto; }
+
+// Arma el número para WhatsApp: sin espacios ni guiones y con código de país (54 si no lo tiene)
+function numeroWhatsApp(tel) {
+  let d = tel.replace(/[^\d]/g, '').replace(/^00/, '');
+  if (!d) return '';
+  if (!tel.trim().startsWith('+') && !d.startsWith('54')) d = '54' + d.replace(/^0/, '');
+  return d;
+}
+
+function mensaje(lead) {
+  return datos.plantilla.replaceAll('{nombre}', lead.nombre || 'su negocio').replaceAll('{ciudad}', lead.ciudad || 'su zona').replaceAll('{rubro}', lead.rubro.toLowerCase());
+}
+
+function filtrados() {
+  const txt = $('filtroTexto').value.trim().toLowerCase();
+  const est = $('filtroEstado').value;
+  const sinWeb = $('filtroSinWeb').checked;
+  return Object.values(datos.leads).filter((l) =>
+    (!txt || (l.nombre + ' ' + l.ciudad + ' ' + l.rubro).toLowerCase().includes(txt)) &&
+    (!est || l.estado === est) &&
+    (!sinWeb || !l.web)
+  ).sort((a, b) => a.ciudad.localeCompare(b.ciudad) || a.nombre.localeCompare(b.nombre));
+}
+
+function dibujar() {
+  const todos = Object.values(datos.leads);
+  const actual = $('filtroEstado').value;
+  $('kpis').innerHTML = [['', 'Total', todos.length]].concat(ESTADOS.map((e) => [e, e, todos.filter((l) => l.estado === e).length]))
+    .map(([valor, titulo, n]) => `<button class="kpi${valor === actual ? ' activo' : ''}" data-estado="${esc(valor)}"><span>${esc(titulo)}</span><b>${n}</b></button>`).join('');
+  const lista = filtrados();
+  $('contador').textContent = `${lista.length} de ${Object.keys(datos.leads).length} en tu lista`;
+  $('filas').innerHTML = lista.map((l, i) => {
+    const tel = numeroWhatsApp(l.telefono);
+    const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
+    const contacto = [l.telefono && l.telefono.replaceAll(' ', '\u00a0').replaceAll('-', '\u2011'), l.email, l.instagram && 'IG: ' + l.instagram, l.direccion].filter(Boolean).map(esc).join('<br>');
+    return `<tr>
+      <td class="idx">${String(i + 1).padStart(3, '0')}</td>
+      <td><select data-id="${esc(l.id)}" class="cambiarEstado e-${l.estado.replaceAll(' ', '-')}">${ESTADOS.map((e) => `<option${e === l.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></td>
+      <td class="nombre">${esc(l.nombre) || '<i>(sin nombre)</i>'}</td>
+      <td>${esc(l.rubro)}</td>
+      <td>${esc(l.ciudad)}</td>
+      <td>${contacto || '<span class="nota">Buscalo en Maps</span>'}</td>
+      <td>${l.web ? `<a href="${esc(l.web)}" target="_blank" rel="noopener">ver</a>` : '<span class="sinweb">Sin web</span>'}</td>
+      <td><input type="text" class="nota-in" data-id="${esc(l.id)}" value="${esc(l.nota)}" placeholder="Ej: llamar el lunes">${l.fecha ? `<span class="fecha">${esc(l.estado)} el ${esc(l.fecha)}</span>` : ''}</td>
+      <td class="acciones">
+        <a href="${maps}" target="_blank" rel="noopener">Maps</a>
+        ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent(mensaje(l))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+        <button class="sec copiar" data-id="${esc(l.id)}">Copiar mensaje</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function exportar() {
+  const cols = ['estado', 'fecha', 'nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'instagram', 'facebook', 'lat', 'lon', 'nota'];
+  const csv = [cols.join(',')].concat(filtrados().map((l) => cols.map((c) => '"' + String(l[c] ?? '').replaceAll('"', '""') + '"').join(','))).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); // ﻿: para que Excel lea bien los acentos
+  a.download = 'clientes.csv';
+  a.click();
+}
+
+// Arranque
+$('zona').value = ATAJOS[1];
+$('atajos').innerHTML = ATAJOS.map((z) => `<button class="sec" data-zona="${esc(z)}">${esc(z.split(',')[0])}</button>`).join('');
+$('atajos').addEventListener('click', (e) => { if (e.target.dataset.zona) $('zona').value = e.target.dataset.zona; });
+$('rubros').innerHTML = RUBROS.map((r) => `<label><input type="checkbox" id="r-${r.id}" checked> ${r.nombre}</label>`).join('');
+$('filtroEstado').innerHTML += ESTADOS.map((e) => `<option>${e}</option>`).join('');
+$('plantilla').value = datos.plantilla;
+$('plantilla').addEventListener('input', (e) => { datos.plantilla = e.target.value; guardar(); dibujar(); });
+document.querySelectorAll('[data-idioma]').forEach((b) => b.addEventListener('click', () => { datos.plantilla = $('plantilla').value = PLANTILLAS[b.dataset.idioma]; guardar(); dibujar(); }));
+$('buscar').addEventListener('click', buscar);
+$('zona').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(); });
+['filtroTexto', 'filtroEstado', 'filtroSinWeb'].forEach((id) => $(id).addEventListener('input', dibujar));
+$('exportar').addEventListener('click', exportar);
+$('borrar').addEventListener('click', () => { if (confirm('¿Borrar toda la lista?')) { datos.leads = {}; guardar(); dibujar(); } });
+$('filas').addEventListener('change', (e) => {
+  const lead = datos.leads[e.target.dataset.id];
+  if (e.target.classList.contains('cambiarEstado')) {
+    lead.estado = e.target.value;
+    lead.fecha = new Date().toLocaleDateString('es-AR'); // cuándo cambió por última vez
+    guardar(); dibujar();
+  }
+  if (e.target.classList.contains('nota-in')) { lead.nota = e.target.value; guardar(); }
+});
+$('kpis').addEventListener('click', (e) => {
+  const b = e.target.closest('.kpi');
+  if (b) { $('filtroEstado').value = b.dataset.estado; dibujar(); }
+});
+// Copia de seguridad: un archivo .json con toda la lista, para no perderla ni pasarla a otra compu
+$('backup').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' }));
+  a.download = 'clientes-copia-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+});
+$('restaurar').addEventListener('click', () => $('archivo').click());
+$('archivo').addEventListener('change', async (e) => {
+  try {
+    const copia = JSON.parse(await e.target.files[0].text());
+    if (!copia.leads) throw new Error();
+    Object.assign(datos.leads, copia.leads);
+    if (copia.plantilla) datos.plantilla = $('plantilla').value = copia.plantilla;
+    guardar(); dibujar();
+    avisar('Copia cargada: ' + Object.keys(copia.leads).length + ' contactos.');
+  } catch { avisar('Ese archivo no es una copia del buscador.'); }
+  e.target.value = '';
+});
+$('filas').addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('copiar')) return;
+  await navigator.clipboard.writeText(mensaje(datos.leads[e.target.dataset.id]));
+  e.target.textContent = '¡Copiado!';
+  setTimeout(() => (e.target.textContent = 'Copiar mensaje'), 1500);
+});
+dibujar();
+</script>
+</body>
+</html>
