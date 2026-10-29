@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Seguridad: la página solo puede cargar cosas y mandar datos a estos sitios. Si alguien lograra meter código, no podría mandar tu lista a otro lado. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://nominatim.openstreetmap.org https://places.googleapis.com; base-uri 'none'; form-action 'none'">
 <title>Buscador de clientes</title>
 <link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet">
 <style>
@@ -257,6 +259,14 @@ function cargar() {
 function guardar() {
   try { localStorage.setItem(CLAVE, JSON.stringify(datos)); } catch { /* sin almacenamiento: sigue andando en memoria */ }
 }
+// Los datos del mapa los carga cualquiera: un link "javascript:..." podría ejecutar código al tocarlo.
+// Solo dejamos pasar links web de verdad.
+function linkSeguro(url) {
+  const u = String(url || '').trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^www\.|^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(u)) return 'https://' + u; // "www.taller.com.ar" sin http
+  return '';
+}
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -377,8 +387,8 @@ function aLeadGoogle(p) {
     direccion: p.formattedAddress || '',
     telefono: p.internationalPhoneNumber || p.nationalPhoneNumber || '',
     email: '', instagram: '', facebook: '',
-    web: p.websiteUri || '',
-    maps: p.googleMapsUri || '',
+    web: linkSeguro(p.websiteUri),
+    maps: linkSeguro(p.googleMapsUri),
     rating: p.rating ? `★ ${p.rating} (${p.userRatingCount || 0} reseñas)` : '',
     lat: p.location?.latitude, lon: p.location?.longitude,
     estado: ESTADOS[0],
@@ -401,7 +411,7 @@ function aLead(el, zona) {
     direccion: [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '),
     telefono: t.phone || t['contact:phone'] || t.mobile || t['contact:mobile'] || t['contact:whatsapp'] || '',
     email: t.email || t['contact:email'] || '',
-    web: t.website || t['contact:website'] || '',
+    web: linkSeguro(t.website || t['contact:website']),
     instagram: t['contact:instagram'] || '',
     facebook: t['contact:facebook'] || '',
     lat, lon,
@@ -527,7 +537,7 @@ function dibujar() {
   $('contador').textContent = `${lista.length} de ${Object.keys(datos.leads).length} en tu lista${ocultas.size ? ` · ${ocultas.size} localidad${ocultas.size > 1 ? 'es' : ''} oculta${ocultas.size > 1 ? 's' : ''}` : ''}`;
   $('filas').innerHTML = lista.map((l, i) => {
     const tel = numeroWhatsApp(l.telefono);
-    const maps = l.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
+    const maps = esc(linkSeguro(l.maps)) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
     const contacto = [l.telefono && l.telefono.replaceAll(' ', '\u00a0').replaceAll('-', '\u2011'), l.email, l.instagram && 'IG: ' + l.instagram, l.direccion].filter(Boolean).map(esc).join('<br>');
     return `<tr data-ficha="${esc(l.id)}" class="${l.id === elegido ? 'elegido' : ''}">
       <td class="idx">${String(i + 1).padStart(3, '0')}</td>
@@ -537,7 +547,7 @@ function dibujar() {
       <td>${esc(l.ciudad)}</td>
       <td class="km">${km(l) == null ? '' : km(l).toFixed(1).replace('.', ',')}</td>
       <td>${contacto || '<span class="nota">Buscalo en Maps</span>'}</td>
-      <td>${l.web ? `<a href="${esc(l.web)}" target="_blank" rel="noopener">ver</a>` : '<span class="sinweb">Sin web</span>'}</td>
+      <td>${l.web ? `<a href="${esc(linkSeguro(l.web))}" target="_blank" rel="noopener">ver</a>` : '<span class="sinweb">Sin web</span>'}</td>
       <td><input type="text" class="nota-in" data-id="${esc(l.id)}" value="${esc(l.nota)}" placeholder="Ej: llamar el lunes">${l.fecha ? `<span class="fecha">${esc(l.estado)} el ${esc(l.fecha)}</span>` : ''}</td>
       <td class="acciones">
         <a href="${maps}" target="_blank" rel="noopener">Maps</a>
@@ -551,13 +561,13 @@ function dibujar() {
 
 // ---- Ficha del local: todos los datos para contactarlo, al costado de la lista ----
 let elegido = null;
-function linkRed(valor, base) { return /^https?:/.test(valor) ? valor : base + valor.replace(/^@/, ''); }
+function linkRed(valor, base) { return /^https?:/.test(valor) ? linkSeguro(valor) : base + encodeURIComponent(valor.replace(/^@/, '')); }
 function mostrarFicha(id) {
   const l = datos.leads[id];
   if (!l) { cerrarFicha(); return; }
   elegido = id;
   const tel = numeroWhatsApp(l.telefono);
-  const maps = l.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
+  const maps = esc(linkSeguro(l.maps)) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
   const asunto = `Sistema de gestión para ${l.nombre || 'su taller'}`;
   const dato = (titulo, html) => (html ? `<div class="dato"><span>${titulo}</span><div>${html}</div></div>` : '');
   const distancia = km(l);
@@ -568,7 +578,7 @@ function mostrarFicha(id) {
       ${l.telefono || l.email || l.web || l.instagram || l.facebook ? '' : '<p class="sin-datos">El mapa no tiene teléfono ni mail de este local. Buscalo en Google Maps o pasá a dejarle una tarjeta.</p>'}
       ${dato('Teléfono', l.telefono && `<a href="tel:${esc(l.telefono.replace(/[^\d+]/g, ''))}">${esc(l.telefono)}</a>`)}
       ${dato('Mail', l.email && `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>`)}
-      ${dato('Web', l.web && `<a href="${esc(l.web)}" target="_blank" rel="noopener">${esc(l.web.replace(/^https?:\/\/(www\.)?/, ''))}</a>`)}
+      ${dato('Web', linkSeguro(l.web) && `<a href="${esc(linkSeguro(l.web))}" target="_blank" rel="noopener">${esc(l.web.replace(/^https?:\/\/(www\.)?/, ''))}</a>`)}
       ${dato('Instagram', l.instagram && `<a href="${esc(linkRed(l.instagram, 'https://instagram.com/'))}" target="_blank" rel="noopener">${esc(l.instagram)}</a>`)}
       ${dato('Facebook', l.facebook && `<a href="${esc(linkRed(l.facebook, 'https://facebook.com/'))}" target="_blank" rel="noopener">${esc(l.facebook)}</a>`)}
       ${dato('Dirección', esc([l.direccion, l.ciudad].filter(Boolean).join(', ')))}
@@ -598,9 +608,11 @@ function cerrarFicha() {
   document.querySelectorAll('#filas tr.elegido').forEach((tr) => tr.classList.remove('elegido'));
 }
 
+// Un nombre que empieza con "=" Excel lo toma como fórmula y la ejecuta: le ponemos un apóstrofo adelante
+const celda = (v) => (/^[=+\-@\t\r]/.test(String(v)) && isNaN(v) ? "'" + v : String(v));
 function exportar() {
   const cols = ['estado', 'fecha', 'nombre', 'rubro', 'ciudad', 'km', 'direccion', 'telefono', 'email', 'web', 'rating', 'maps', 'instagram', 'facebook', 'lat', 'lon', 'nota'];
-  const csv = [cols.join(',')].concat(filtrados().map((l) => cols.map((c) => '"' + String((c === 'km' ? km(l)?.toFixed(1) : l[c]) ?? '').replaceAll('"', '""') + '"').join(','))).join('\n');
+  const csv = [cols.join(',')].concat(filtrados().map((l) => cols.map((c) => '"' + celda((c === 'km' ? km(l)?.toFixed(1) : l[c]) ?? '').replaceAll('"', '""') + '"').join(','))).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); // ﻿: para que Excel lea bien los acentos
   a.download = 'clientes.csv';
@@ -647,13 +659,23 @@ $('backup').addEventListener('click', () => {
   a.download = 'clientes-copia-' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
 });
+const CAMPOS = ['nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'maps', 'instagram', 'facebook', 'rating', 'nota', 'fecha'];
+function limpiarLead(l, id) {
+  const limpio = { id: String(id), estado: ESTADOS.includes(l?.estado) ? l.estado : ESTADOS[0] };
+  for (const c of CAMPOS) limpio[c] = typeof l?.[c] === 'string' ? l[c].slice(0, 500) : '';
+  limpio.web = linkSeguro(limpio.web); limpio.maps = linkSeguro(limpio.maps);
+  const num = (v) => (v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  limpio.lat = num(l?.lat); limpio.lon = num(l?.lon);
+  return limpio;
+}
 $('restaurar').addEventListener('click', () => $('archivo').click());
 $('archivo').addEventListener('change', async (e) => {
   try {
     const copia = JSON.parse(await e.target.files[0].text());
-    if (!copia.leads) throw new Error();
-    Object.assign(datos.leads, copia.leads);
-    if (copia.plantilla) datos.plantilla = $('plantilla').value = copia.plantilla;
+    if (!copia.leads || typeof copia.leads !== 'object') throw new Error();
+    // Un archivo puede venir tocado: copiamos solo los campos que conocemos, como texto
+    for (const [id, l] of Object.entries(copia.leads)) datos.leads[String(id)] = limpiarLead(l, id);
+    if (typeof copia.plantilla === 'string') datos.plantilla = $('plantilla').value = copia.plantilla;
     guardar(); dibujar();
     avisar('Copia cargada: ' + Object.keys(copia.leads).length + ' contactos.');
   } catch { avisar('Ese archivo no es una copia del buscador.'); }
