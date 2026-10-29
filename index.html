@@ -212,7 +212,8 @@ async function buscarZona(texto) {
   const lugar = lista.find((l) => l.osm_type === 'relation') || lista.find((l) => l.osm_type === 'way');
   if (lugar) {
     const base = lugar.osm_type === 'relation' ? 3600000000 : 2400000000;
-    return { filtro: `area(${base + Number(lugar.osm_id)})->.a;`, dentro: '(area.a)', nombre: lugar.display_name };
+    // place_rank chico = zona grande (4 país, 8 provincia): le damos más tiempo
+    return { filtro: `area(${base + Number(lugar.osm_id)})->.a;`, dentro: '(area.a)', nombre: lugar.display_name, grande: Number(lugar.place_rank) <= 8 };
   }
   // Algunos barrios son solo un punto en el mapa: buscamos 4 km a la redonda
   if (!lista[0]) throw new Error('No encontré esa zona. Probá con "Ciudad, Provincia, País".');
@@ -222,13 +223,20 @@ async function buscarZona(texto) {
 // 2) Pedirle a Overpass los comercios de esos rubros dentro del área
 async function buscarComercios(zona, rubros) {
   const partes = rubros.map((r) => `nwr["${r.tag[0]}"="${r.tag[1]}"]${zona.dentro};`).join('');
-  const query = `[out:json][timeout:180];${zona.filtro}(${partes});out center tags;`;
+  const segundos = zona.grande ? 170 : 50;
+  const query = `[out:json][timeout:${segundos}];${zona.filtro}(${partes});out center tags;`;
   // Overpass es gratis y a veces está saturado: si un servidor falla, probamos el siguiente
-  for (const servidor of SERVIDORES) {
+  for (const [i, servidor] of SERVIDORES.entries()) {
+    // Si un servidor no contesta a tiempo, cortamos y probamos el siguiente
+    const corte = new AbortController();
+    const reloj = setTimeout(() => corte.abort(), (segundos + 10) * 1000);
+    const inicio = Date.now();
+    const contador = setInterval(() => avisar(`Buscando comercios en ${zona.nombre}… servidor ${i + 1} de ${SERVIDORES.length}, ${Math.round((Date.now() - inicio) / 1000)} s`), 1000);
     try {
-      const r = await fetch(servidor, { method: 'POST', body: 'data=' + encodeURIComponent(query) });
+      const r = await fetch(servidor, { method: 'POST', body: new URLSearchParams({ data: query }), signal: corte.signal });
       if (r.ok) return (await r.json()).elements || [];
-    } catch { /* sin conexión con este servidor: seguimos */ }
+    } catch { /* no contestó o cortó: seguimos con el próximo */ }
+    finally { clearTimeout(reloj); clearInterval(contador); }
   }
   throw new Error('Los servidores de mapas no respondieron. Esperá un minuto y probá de nuevo, o elegí una zona más chica.');
 }
