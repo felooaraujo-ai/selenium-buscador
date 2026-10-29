@@ -136,7 +136,7 @@
   <div class="rubros" id="rubros"></div>
   <label class="chk"><input type="checkbox" id="soloConNombre" checked> Solo los que tienen nombre</label>
   <div id="estado"></div>
-  <p class="nota">La lista se guarda en este navegador: usá "Guardar copia" de vez en cuando para no perderla. Ojo: un país entero puede tardar un par de minutos. OpenStreetMap no tiene todos los comercios, sobre todo en pueblos chicos.</p>
+  <p class="nota">La lista se guarda en este navegador: usá "Guardar copia" de vez en cuando para no perderla. OpenStreetMap no tiene todos los comercios, sobre todo en pueblos chicos.</p>
 </section>
 
 <section class="card">
@@ -190,11 +190,6 @@ const PLANTILLAS = {
   en: 'Hi! I\'m Felipe from Selenium Systems. I came across {nombre} in {ciudad} and wanted to tell you about a management system I built for furniture workshops: orders, clients, production, PDF quotes and delivery alerts, all from your phone. Would you like a 10-minute demo?',
 };
 const CLAVE = 'buscador-clientes-v1';
-const SERVIDORES = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
 // Atajos de zona: de lo más cercano a lo más amplio
 const ATAJOS = [
   'Martín Coronado, Tres de Febrero, Buenos Aires, Argentina',
@@ -219,42 +214,50 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// 1) Convertir el nombre de la zona en un área de OpenStreetMap
+// 1) Convertir el nombre de la zona en un rectángulo del mapa
 async function buscarZona(texto) {
-  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(texto);
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=' + encodeURIComponent(texto);
   const r = await fetch(url, { headers: { 'Accept-Language': 'es' } });
   if (!r.ok) throw new Error('No pude buscar la zona (' + r.status + ')');
-  const lista = await r.json();
-  const lugar = lista.find((l) => l.osm_type === 'relation') || lista.find((l) => l.osm_type === 'way');
-  if (lugar) {
-    const base = lugar.osm_type === 'relation' ? 3600000000 : 2400000000;
-    // place_rank chico = zona grande (4 país, 8 provincia): le damos más tiempo
-    return { filtro: `area(${base + Number(lugar.osm_id)})->.a;`, dentro: '(area.a)', nombre: lugar.display_name, grande: Number(lugar.place_rank) <= 8 };
-  }
+  const [lugar] = await r.json();
+  if (!lugar) throw new Error('No encontré esa zona. Probá con "Ciudad, Provincia, País".');
+  let [sur, norte, oeste, este] = lugar.boundingbox.map(Number);
   // Algunos barrios son solo un punto en el mapa: buscamos 4 km a la redonda
-  if (!lista[0]) throw new Error('No encontré esa zona. Probá con "Ciudad, Provincia, País".');
-  return { filtro: '', dentro: `(around:4000,${lista[0].lat},${lista[0].lon})`, nombre: lista[0].display_name + ' (4 km a la redonda)' };
+  const punto = norte - sur < 0.02;
+  if (punto) { sur -= 0.036; norte += 0.036; oeste -= 0.044; este += 0.044; }
+  // el rectángulo de un país toca a los vecinos: nos quedamos solo con ese país
+  return { caja: [oeste, norte, este, sur].join(','), pais: lugar.address?.country_code || '', nombre: lugar.display_name + (punto ? ' (4 km a la redonda)' : '') };
 }
 
-// 2) Pedirle a Overpass los comercios de esos rubros dentro del área
+// 2) Pedirle a Nominatim los comercios de cada rubro dentro de ese rectángulo.
+// Antes se usaba Overpass, pero sus servidores se colgaban; Nominatim es el mismo mapa y contesta rápido.
+const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 async function buscarComercios(zona, rubros) {
-  const partes = rubros.map((r) => `nwr["${r.tag[0]}"="${r.tag[1]}"]${zona.dentro};`).join('');
-  const segundos = zona.grande ? 170 : 50;
-  const query = `[out:json][timeout:${segundos}];${zona.filtro}(${partes});out center tags;`;
-  // Overpass es gratis y a veces está saturado: si un servidor falla, probamos el siguiente
-  for (const [i, servidor] of SERVIDORES.entries()) {
-    // Si un servidor no contesta a tiempo, cortamos y probamos el siguiente
-    const corte = new AbortController();
-    const reloj = setTimeout(() => corte.abort(), (segundos + 10) * 1000);
-    const inicio = Date.now();
-    const contador = setInterval(() => avisar(`Buscando comercios en ${zona.nombre}… servidor ${i + 1} de ${SERVIDORES.length}, ${Math.round((Date.now() - inicio) / 1000)} s`), 1000);
-    try {
-      const r = await fetch(servidor, { method: 'POST', body: new URLSearchParams({ data: query }), signal: corte.signal });
-      if (r.ok) return (await r.json()).elements || [];
-    } catch { /* no contestó o cortó: seguimos con el próximo */ }
-    finally { clearTimeout(reloj); clearInterval(contador); }
+  const elementos = [];
+  for (const rubro of rubros) {
+    const vistos = [];
+    for (let n = 0; n < 3; n++) { // hasta 3 páginas de 40 por rubro
+      avisar(`Buscando ${rubro.nombre.toLowerCase()} en ${zona.nombre}… (${elementos.length} encontrados)`);
+      const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+        q: `[${rubro.tag[0]}=${rubro.tag[1]}]`, format: 'jsonv2', limit: 40, viewbox: zona.caja, bounded: 1,
+        extratags: 1, addressdetails: 1, ...(zona.pais && { countrycodes: zona.pais }), ...(vistos.length && { exclude_place_ids: vistos.join(',') }),
+      });
+      const r = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      if (!r.ok) throw new Error('El servidor de mapas no respondió (' + r.status + '). Esperá un minuto y probá de nuevo.');
+      const lista = await r.json();
+      for (const l of lista) {
+        vistos.push(l.place_id);
+        const d = l.address || {};
+        elementos.push({
+          type: l.osm_type, id: l.osm_id, lat: Number(l.lat), lon: Number(l.lon),
+          tags: { ...l.extratags, name: l.name, [l.category]: l.type, 'addr:city': d.city || d.town || d.village || d.suburb, 'addr:street': d.road, 'addr:housenumber': d.house_number },
+        });
+      }
+      await esperar(1100); // Nominatim pide como máximo un pedido por segundo
+      if (lista.length < 40) break;
+    }
   }
-  throw new Error('Los servidores de mapas no respondieron. Esperá un minuto y probá de nuevo, o elegí una zona más chica.');
+  return elementos;
 }
 
 // ---- Google Maps (Places API New) ----
