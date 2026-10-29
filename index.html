@@ -116,6 +116,11 @@
   .botones a:hover { text-decoration:none; filter:brightness(.95); }
   .sin-datos { padding:12px; border-radius:8px; background:var(--critico-bg); color:#a04600; font-size:13px; }
   .con { display:inline-block; font-size:11px; font-weight:600; padding:1px 6px; border-radius:8px; background:var(--positivo-bg); color:var(--positivo); margin:2px 4px 0 0; }
+  .locs { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:14px; }
+  .locs > span { font-size:13px; color:var(--texto2); margin-right:4px; }
+  .locs button { height:28px; padding:0 10px; font-size:13px; font-weight:400; border-radius:14px; background:#fff; color:var(--texto); border-color:var(--borde-campo); }
+  .locs button:hover { border-color:var(--marca); background:var(--marca-suave); }
+  .locs button.oculta { color:var(--texto2); background:var(--neutro-bg); text-decoration:line-through; border-color:transparent; }
   @media (min-width:1100px) { body.con-ficha { padding-right:400px; } } /* en pantallas anchas la lista se corre y no queda tapada */
   @media (max-width:600px) { .ficha { top:auto; height:85vh; width:100vw; border-radius:16px 16px 0 0; } }
   @media (max-width:600px) { header p { display:none; } .card { padding:16px; } }
@@ -197,6 +202,7 @@
     <div style="flex:0 0 auto"><button class="sec" id="restaurar">Cargar copia</button><input type="file" id="archivo" accept=".json" hidden></div>
     <div style="flex:0 0 auto"><button class="sec" id="borrar">Vaciar lista</button></div>
   </div>
+  <div class="locs" id="locs"></div>
   <p class="contador" id="contador"></p>
   <div class="tabla">
     <table>
@@ -217,6 +223,12 @@ const RUBROS = [
   { id: 'muebleria', nombre: 'Mueblerías', tag: ['shop', 'furniture'], google: 'mueblería' },
   { id: 'cocinas', nombre: 'Cocinas a medida', tag: ['shop', 'kitchen'], google: 'muebles de cocina a medida' },
   { id: 'tapiceria', nombre: 'Tapicerías', tag: ['craft', 'upholsterer'], google: 'tapicería' },
+  // Otros oficios que también trabajan con pedidos a medida y producción: vienen destildados
+  { id: 'herreria', nombre: 'Herrerías', tag: ['craft', 'metal_construction'], google: 'herrería', extra: true },
+  { id: 'aluminio', nombre: 'Aberturas de aluminio / PVC', tag: ['craft', 'window_construction'], google: 'aberturas de aluminio', extra: true },
+  { id: 'vidrieria', nombre: 'Vidrierías', tag: ['craft', 'glaziery'], google: 'vidriería', extra: true },
+  { id: 'deco', nombre: 'Decoración / interiorismo', tag: ['shop', 'interior_decoration'], google: 'interiorismo', extra: true },
+  { id: 'colchoneria', nombre: 'Colchonerías / sommiers', tag: ['shop', 'bed'], google: 'colchonería', extra: true },
 ];
 const ESTADOS = ['Por contactar', 'Contactado', 'Interesado', 'Cliente', 'No le interesa'];
 const PLANTILLAS = {
@@ -478,19 +490,24 @@ async function calcularKm() {
   } catch (e) { $('origenTexto').textContent = e.message; }
 }
 
+// "Caseros · Tres de Febrero" → "Caseros"
+const localidad = (l) => (l.ciudad || '').split(' · ')[0] || '(sin localidad)';
+
 function filtrados() {
   const txt = $('filtroTexto').value.trim().toLowerCase();
   const est = $('filtroEstado').value;
   const sinWeb = $('filtroSinWeb').checked;
   const hasta = Number($('filtroKm').value);
   const con = $('filtroContacto').value;
+  const ocultas = new Set(datos.ocultas || []);
   const pasaContacto = (l) => !con || (con === 'tel' ? l.telefono : con === 'mail' ? l.email : con === 'ambos' ? l.telefono && l.email : l.telefono || l.email);
   return Object.values(datos.leads).filter((l) =>
     (!txt || (l.nombre + ' ' + l.ciudad + ' ' + l.rubro).toLowerCase().includes(txt)) &&
     (!est || l.estado === est) &&
     (!sinWeb || !l.web) &&
     (!hasta || (km(l) ?? Infinity) <= hasta) &&
-    pasaContacto(l)
+    pasaContacto(l) &&
+    !ocultas.has(localidad(l))
   ).sort((a, b) => (datos.origen ? (km(a) ?? 1e9) - (km(b) ?? 1e9) : 0) || a.ciudad.localeCompare(b.ciudad) || a.nombre.localeCompare(b.nombre));
 }
 
@@ -499,9 +516,15 @@ function dibujar() {
   const actual = $('filtroEstado').value;
   $('kpis').innerHTML = [['', 'Total', todos.length]].concat(ESTADOS.map((e) => [e, e, todos.filter((l) => l.estado === e).length]))
     .map(([valor, titulo, n]) => `<button class="kpi${valor === actual ? ' activo' : ''}" data-estado="${esc(valor)}"><span>${esc(titulo)}</span><b>${n}</b></button>`).join('');
+  // Localidades de la lista: tocando una se oculta (o se vuelve a mostrar)
+  const cuenta = {};
+  for (const l of todos) cuenta[localidad(l)] = (cuenta[localidad(l)] || 0) + 1;
+  const ocultas = new Set(datos.ocultas || []);
+  $('locs').innerHTML = Object.keys(cuenta).length < 2 ? '' : '<span>Localidades (tocá para ocultar):</span>' + Object.entries(cuenta).sort((a, b) => b[1] - a[1])
+    .map(([loc, n]) => `<button class="${ocultas.has(loc) ? 'oculta' : ''}" data-loc="${esc(loc)}" title="${ocultas.has(loc) ? 'Volver a mostrar' : 'Ocultar'}">${esc(loc)} (${n})</button>`).join('');
   const lista = filtrados();
   if (datos.origen) $('origenTexto').textContent = 'Km en línea recta desde ' + datos.origen.nombre + '. La lista está ordenada del más cercano al más lejano.';
-  $('contador').textContent = `${lista.length} de ${Object.keys(datos.leads).length} en tu lista`;
+  $('contador').textContent = `${lista.length} de ${Object.keys(datos.leads).length} en tu lista${ocultas.size ? ` · ${ocultas.size} localidad${ocultas.size > 1 ? 'es' : ''} oculta${ocultas.size > 1 ? 's' : ''}` : ''}`;
   $('filas').innerHTML = lista.map((l, i) => {
     const tel = numeroWhatsApp(l.telefono);
     const maps = l.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
@@ -588,7 +611,7 @@ function exportar() {
 $('zona').value = datos.origen ? MI_PUNTO : ATAJOS[1];
 $('atajos').innerHTML = [MI_PUNTO, ...ATAJOS].map((z) => `<button class="sec" data-zona="${esc(z)}">${esc(z.split(',')[0])}</button>`).join('');
 $('atajos').addEventListener('click', (e) => { if (e.target.dataset.zona) $('zona').value = e.target.dataset.zona; });
-$('rubros').innerHTML = RUBROS.map((r) => `<label><input type="checkbox" id="r-${r.id}" checked> ${r.nombre}</label>`).join('');
+$('rubros').innerHTML = RUBROS.map((r) => `<label><input type="checkbox" id="r-${r.id}"${r.extra ? '' : ' checked'}> ${r.nombre}</label>`).join('');
 $('filtroEstado').innerHTML += ESTADOS.map((e) => `<option>${e}</option>`).join('');
 $('plantilla').value = datos.plantilla;
 $('plantilla').addEventListener('input', (e) => { datos.plantilla = e.target.value; guardar(); dibujar(); });
@@ -641,6 +664,13 @@ $('filas').addEventListener('click', (e) => {
   if (e.target.closest('a, button, select, input')) return;
   const tr = e.target.closest('tr[data-ficha]');
   if (tr) mostrarFicha(tr.dataset.ficha);
+});
+$('locs').addEventListener('click', (e) => {
+  const loc = e.target.dataset.loc;
+  if (!loc) return;
+  const ocultas = new Set(datos.ocultas || []);
+  ocultas.has(loc) ? ocultas.delete(loc) : ocultas.add(loc);
+  datos.ocultas = [...ocultas]; guardar(); dibujar();
 });
 $('ficha').addEventListener('click', (e) => { if (e.target.id === 'cerrarFicha') cerrarFicha(); });
 $('ficha').addEventListener('change', (e) => {
