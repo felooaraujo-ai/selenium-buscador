@@ -66,6 +66,7 @@
   /* Tabla */
   .tabla { overflow-x:auto; border:1px solid var(--borde); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:14px; }
+  td.km { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
   th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--borde); vertical-align:middle; }
   tbody tr:last-child td { border-bottom:0; }
   th { font-size:13px; font-weight:600; color:var(--texto2); background:#fafbfc; white-space:nowrap; }
@@ -153,6 +154,11 @@
 
 <section class="card">
   <h2>Contactos</h2>
+  <div class="row">
+    <div><label for="origen">Punto de partida, para ver a cuántos km queda cada uno (se guarda solo en este navegador)</label><input type="text" id="origen" placeholder="Ej: Calle 1234, Localidad"></div>
+    <div style="flex:0 0 auto"><button class="sec" id="calcularKm">Calcular km</button></div>
+  </div>
+  <p class="nota" id="origenTexto"></p>
   <div class="kpis" id="kpis"></div>
   <div class="row">
     <div><label for="filtroTexto">Filtrar</label><input type="text" id="filtroTexto" placeholder="Nombre, ciudad…"></div>
@@ -166,7 +172,7 @@
   <p class="contador" id="contador"></p>
   <div class="tabla">
     <table>
-      <thead><tr><th>#</th><th>Estado</th><th>Nombre</th><th>Rubro</th><th>Ciudad</th><th>Contacto</th><th>Web</th><th>Nota</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>#</th><th>Estado</th><th>Nombre</th><th>Rubro</th><th>Localidad</th><th>Km</th><th>Contacto</th><th>Web</th><th>Nota</th><th>Acciones</th></tr></thead>
       <tbody id="filas"></tbody>
     </table>
   </div>
@@ -250,7 +256,7 @@ async function buscarComercios(zona, rubros) {
         const d = l.address || {};
         elementos.push({
           type: l.osm_type, id: l.osm_id, lat: Number(l.lat), lon: Number(l.lon),
-          tags: { ...l.extratags, name: l.name, [l.category]: l.type, 'addr:city': d.city || d.town || d.village || d.suburb, 'addr:street': d.road, 'addr:housenumber': d.house_number },
+          tags: { ...l.extratags, name: l.name, [l.category]: l.type, 'addr:city': [d.village || d.town || d.suburb || d.city, (d.state_district || '').replace('Partido de ', '')].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' · '), 'addr:street': d.road, 'addr:housenumber': d.house_number },
         });
       }
       await esperar(1100); // Nominatim pide como máximo un pedido por segundo
@@ -404,7 +410,30 @@ function numeroWhatsApp(tel) {
 }
 
 function mensaje(lead) {
-  return datos.plantilla.replaceAll('{nombre}', lead.nombre || 'su negocio').replaceAll('{ciudad}', lead.ciudad || 'su zona').replaceAll('{rubro}', lead.rubro.toLowerCase());
+  return datos.plantilla.replaceAll('{nombre}', lead.nombre || 'su negocio').replaceAll('{ciudad}', lead.ciudad.split(' · ')[0] || 'su zona').replaceAll('{rubro}', lead.rubro.toLowerCase());
+}
+
+// Distancia en línea recta (fórmula de haversine): sin pedirle nada a nadie
+function km(l) {
+  const o = datos.origen;
+  if (!o || l.lat == null) return null;
+  const rad = (g) => g * Math.PI / 180;
+  const a = Math.sin(rad(l.lat - o.lat) / 2) ** 2 + Math.cos(rad(o.lat)) * Math.cos(rad(l.lat)) * Math.sin(rad(l.lon - o.lon) / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(a));
+}
+
+async function calcularKm() {
+  const texto = $('origen').value.trim();
+  if (!texto) return;
+  $('origenTexto').textContent = 'Buscando la dirección…';
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ar,uy,cl,py,br&q=' + encodeURIComponent(texto), { headers: { 'Accept-Language': 'es' } });
+    if (!r.ok) throw new Error('El mapa está ocupado, probá de nuevo en unos segundos.');
+    const [lugar] = await r.json();
+    if (!lugar) throw new Error('No encontré esa dirección. Probá agregando la localidad y la provincia.');
+    datos.origen = { texto, lat: Number(lugar.lat), lon: Number(lugar.lon), nombre: lugar.display_name };
+    guardar(); dibujar();
+  } catch (e) { $('origenTexto').textContent = e.message; }
 }
 
 function filtrados() {
@@ -415,7 +444,7 @@ function filtrados() {
     (!txt || (l.nombre + ' ' + l.ciudad + ' ' + l.rubro).toLowerCase().includes(txt)) &&
     (!est || l.estado === est) &&
     (!sinWeb || !l.web)
-  ).sort((a, b) => a.ciudad.localeCompare(b.ciudad) || a.nombre.localeCompare(b.nombre));
+  ).sort((a, b) => (datos.origen ? (km(a) ?? 1e9) - (km(b) ?? 1e9) : 0) || a.ciudad.localeCompare(b.ciudad) || a.nombre.localeCompare(b.nombre));
 }
 
 function dibujar() {
@@ -424,6 +453,7 @@ function dibujar() {
   $('kpis').innerHTML = [['', 'Total', todos.length]].concat(ESTADOS.map((e) => [e, e, todos.filter((l) => l.estado === e).length]))
     .map(([valor, titulo, n]) => `<button class="kpi${valor === actual ? ' activo' : ''}" data-estado="${esc(valor)}"><span>${esc(titulo)}</span><b>${n}</b></button>`).join('');
   const lista = filtrados();
+  if (datos.origen) $('origenTexto').textContent = 'Km en línea recta desde ' + datos.origen.nombre + '. La lista está ordenada del más cercano al más lejano.';
   $('contador').textContent = `${lista.length} de ${Object.keys(datos.leads).length} en tu lista`;
   $('filas').innerHTML = lista.map((l, i) => {
     const tel = numeroWhatsApp(l.telefono);
@@ -435,6 +465,7 @@ function dibujar() {
       <td class="nombre">${esc(l.nombre) || '<i>(sin nombre)</i>'}${l.rating ? `<span class="rating">${esc(l.rating)}</span>` : ''}</td>
       <td>${esc(l.rubro)}</td>
       <td>${esc(l.ciudad)}</td>
+      <td class="km">${km(l) == null ? '' : km(l).toFixed(1).replace('.', ',')}</td>
       <td>${contacto || '<span class="nota">Buscalo en Maps</span>'}</td>
       <td>${l.web ? `<a href="${esc(l.web)}" target="_blank" rel="noopener">ver</a>` : '<span class="sinweb">Sin web</span>'}</td>
       <td><input type="text" class="nota-in" data-id="${esc(l.id)}" value="${esc(l.nota)}" placeholder="Ej: llamar el lunes">${l.fecha ? `<span class="fecha">${esc(l.estado)} el ${esc(l.fecha)}</span>` : ''}</td>
@@ -448,8 +479,8 @@ function dibujar() {
 }
 
 function exportar() {
-  const cols = ['estado', 'fecha', 'nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'rating', 'maps', 'instagram', 'facebook', 'lat', 'lon', 'nota'];
-  const csv = [cols.join(',')].concat(filtrados().map((l) => cols.map((c) => '"' + String(l[c] ?? '').replaceAll('"', '""') + '"').join(','))).join('\n');
+  const cols = ['estado', 'fecha', 'nombre', 'rubro', 'ciudad', 'km', 'direccion', 'telefono', 'email', 'web', 'rating', 'maps', 'instagram', 'facebook', 'lat', 'lon', 'nota'];
+  const csv = [cols.join(',')].concat(filtrados().map((l) => cols.map((c) => '"' + String((c === 'km' ? km(l)?.toFixed(1) : l[c]) ?? '').replaceAll('"', '""') + '"').join(','))).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); // ﻿: para que Excel lea bien los acentos
   a.download = 'clientes.csv';
@@ -469,6 +500,9 @@ try { $('claveGoogle').value = localStorage.getItem(CLAVE + '-google') || ''; } 
 $('claveGoogle').addEventListener('change', (e) => { try { localStorage.setItem(CLAVE + '-google', e.target.value.trim()); } catch {} });
 document.querySelectorAll('input[name=fuente]').forEach((r) => r.addEventListener('change', () => { $('panelGoogle').hidden = fuente() !== 'google'; mostrarUso(); }));
 $('buscar').addEventListener('click', buscar);
+$('calcularKm').addEventListener('click', calcularKm);
+$('origen').addEventListener('keydown', (e) => { if (e.key === 'Enter') calcularKm(); });
+$('origen').value = datos.origen?.texto || '';
 $('zona').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(); });
 ['filtroTexto', 'filtroEstado', 'filtroSinWeb'].forEach((id) => $(id).addEventListener('input', dibujar));
 $('exportar').addEventListener('click', exportar);
