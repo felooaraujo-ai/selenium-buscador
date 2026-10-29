@@ -53,7 +53,8 @@
   input[type=radio] { accent-color:var(--marca); width:16px; height:16px; vertical-align:-3px; margin:0 6px 0 0; }
   .google { margin-top:12px; padding:12px; border-radius:8px; background:#f5fafe; border:1px solid #d1e8ff; }
   .rating { display:block; font-size:12px; font-weight:400; color:var(--texto2); margin-top:2px; }
-  .rubros { display:flex; flex-wrap:wrap; gap:10px 22px; margin:16px 0 12px; padding-top:16px; border-top:1px solid var(--borde); }
+  .sectores { margin-top:16px; padding-top:16px; border-top:1px solid var(--borde); max-width:320px; }
+  .rubros { display:flex; flex-wrap:wrap; gap:10px 22px; margin:14px 0 12px; }
   .rubros label, .chk { color:var(--texto); font-size:14px; margin:0; }
 
   button { height:36px; padding:0 16px; border:1px solid var(--marca); border-radius:8px; background:var(--marca); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
@@ -138,7 +139,7 @@
 </header>
 <div class="pagina">
   <h2>Buscador de clientes</h2>
-  <p>Talleres de muebles, carpinterías y mueblerías por zona.</p>
+  <p>Negocios por zona y por sector, para ofrecerles un sistema de gestión.</p>
 </div>
 <main>
 
@@ -167,6 +168,7 @@
     </div>
     <p class="nota" id="usoGoogle"></p>
   </div>
+  <div class="sectores"><label for="sector">Sector</label><select id="sector"></select></div>
   <div class="rubros" id="rubros"></div>
   <label class="chk"><input type="checkbox" id="soloConNombre" checked> Solo los que tienen nombre</label>
   <div id="estado"></div>
@@ -175,7 +177,7 @@
 
 <section class="card">
   <h2>Mensaje</h2>
-  <label for="plantilla">Plantilla. Podés usar {nombre}, {ciudad} y {rubro}.</label>
+  <label for="plantilla">Plantilla para <b id="sectorMensaje"></b> (cada sector tiene la suya). Podés usar {nombre}, {ciudad} y {rubro}.</label>
   <textarea id="plantilla"></textarea>
   <div class="row" style="margin-top:8px">
     <div style="flex:0 0 auto"><button class="sec" data-idioma="es">Plantilla en español</button></div>
@@ -217,26 +219,66 @@
 </main>
 <aside class="ficha" id="ficha" hidden></aside>
 <script>
-// Rubros: cada uno es una etiqueta de OpenStreetMap
-const RUBROS = [
-  { id: 'carpinteria', nombre: 'Carpinterías', tag: ['craft', 'carpenter'], google: 'carpintería' },
-  { id: 'ebanisteria', nombre: 'Fábricas de muebles / ebanistas', tag: ['craft', 'cabinet_maker'], google: 'fábrica de muebles' },
-  { id: 'aberturas', nombre: 'Carpintería de obra / aberturas', tag: ['craft', 'joiner'], google: 'aberturas de madera' },
-  { id: 'muebleria', nombre: 'Mueblerías', tag: ['shop', 'furniture'], google: 'mueblería' },
-  { id: 'cocinas', nombre: 'Cocinas a medida', tag: ['shop', 'kitchen'], google: 'muebles de cocina a medida' },
-  { id: 'tapiceria', nombre: 'Tapicerías', tag: ['craft', 'upholsterer'], google: 'tapicería' },
-  // Otros oficios que también trabajan con pedidos a medida y producción: vienen destildados
-  { id: 'herreria', nombre: 'Herrerías', tag: ['craft', 'metal_construction'], google: 'herrería', extra: true },
-  { id: 'aluminio', nombre: 'Aberturas de aluminio / PVC', tag: ['craft', 'window_construction'], google: 'aberturas de aluminio', extra: true },
-  { id: 'vidrieria', nombre: 'Vidrierías', tag: ['craft', 'glaziery'], google: 'vidriería', extra: true },
-  { id: 'deco', nombre: 'Decoración / interiorismo', tag: ['shop', 'interior_decoration'], google: 'interiorismo', extra: true },
-  { id: 'colchoneria', nombre: 'Colchonerías / sommiers', tag: ['shop', 'bed'], google: 'colchonería', extra: true },
-];
+// Sectores: cada uno con sus rubros (etiquetas de OpenStreetMap) y su mensaje.
+// El mensaje cambia porque cada negocio tiene un dolor distinto: el taller, las entregas; el consultorio, los turnos.
+const HOLA = 'Hola, ¿qué tal? Soy Felipe, de Selenium Systems. Vi {nombre} en {ciudad}. ';
+const DEMO = ' ¿Les interesa que les muestre una demo de 10 minutos?';
+const SECTORES = {
+  muebles: { nombre: 'Muebles y madera', mensaje: 'Hola, ¿qué tal? Soy Felipe, de Selenium Systems. Vi {nombre} en {ciudad} y les quería contar de un sistema de gestión que armé para talleres de muebles: pedidos, clientes, producción, presupuestos en PDF y aviso de entregas, todo desde el celular. Ya lo usa un taller de amoblamientos.' + DEMO, rubros: [
+    ['carpinteria', 'Carpinterías', 'craft=carpenter', 'carpintería'],
+    ['ebanisteria', 'Fábricas de muebles / ebanistas', 'craft=cabinet_maker', 'fábrica de muebles'],
+    ['aberturas', 'Carpintería de obra / aberturas', 'craft=joiner', 'aberturas de madera'],
+    ['muebleria', 'Mueblerías', 'shop=furniture', 'mueblería'],
+    ['cocinas', 'Cocinas a medida', 'shop=kitchen', 'muebles de cocina a medida'],
+    ['tapiceria', 'Tapicerías', 'craft=upholsterer', 'tapicería'],
+    ['colchoneria', 'Colchonerías / sommiers', 'shop=bed', 'colchonería'],
+  ] },
+  oficios: { nombre: 'Oficios a pedido', mensaje: HOLA + 'Armo sistemas de gestión para talleres que trabajan a pedido: presupuestos en PDF, pedidos, producción, cobros y aviso de entregas, todo desde el celular. Ya lo usa un taller de amoblamientos.' + DEMO, rubros: [
+    ['herreria', 'Herrerías', 'craft=metal_construction', 'herrería'],
+    ['aluminio', 'Aberturas de aluminio / PVC', 'craft=window_construction', 'aberturas de aluminio'],
+    ['vidrieria', 'Vidrierías', 'craft=glaziery', 'vidriería'],
+    ['marmoleria', 'Marmolerías', 'craft=stonemason', 'marmolería'],
+    ['deco', 'Decoración / interiorismo', 'shop=interior_decoration', 'interiorismo'],
+  ] },
+  autos: { nombre: 'Autos', mensaje: HOLA + 'Armo sistemas para talleres: órdenes de trabajo, historial de cada auto por patente, presupuestos en PDF y aviso por WhatsApp cuando el auto está listo.' + DEMO, rubros: [
+    ['mecanica', 'Talleres mecánicos', 'shop=car_repair', 'taller mecánico'],
+    ['gomeria', 'Gomerías', 'shop=tyres', 'gomería'],
+    ['repuestos', 'Repuestos', 'shop=car_parts', 'repuestos de autos'],
+    ['lavadero', 'Lavaderos de autos', 'amenity=car_wash', 'lavadero de autos'],
+  ] },
+  salud: { nombre: 'Salud', mensaje: HOLA + 'Armo sistemas de turnos para consultorios: turnos online, recordatorio por WhatsApp para que los pacientes no falten y la ficha con el historial de cada uno.' + DEMO, rubros: [
+    ['dentista', 'Odontólogos', 'amenity=dentist', 'odontólogo'],
+    ['veterinaria', 'Veterinarias', 'amenity=veterinary', 'veterinaria'],
+    ['optica', 'Ópticas', 'shop=optician', 'óptica'],
+    ['consultorio', 'Consultorios médicos', 'amenity=doctors', 'consultorio médico'],
+    ['kinesio', 'Kinesiología', 'healthcare=physiotherapist', 'kinesiología'],
+  ] },
+  estetica: { nombre: 'Estética y deporte', mensaje: HOLA + 'Armo sistemas para peluquerías, centros de estética y gimnasios: turnos online, recordatorio por WhatsApp y control de cuotas y pagos, todo desde el celular.' + DEMO, rubros: [
+    ['peluqueria', 'Peluquerías / barberías', 'shop=hairdresser', 'peluquería'],
+    ['estetica', 'Centros de estética', 'shop=beauty', 'centro de estética'],
+    ['gimnasio', 'Gimnasios', 'leisure=fitness_centre', 'gimnasio'],
+  ] },
+  comercios: { nombre: 'Comercios', mensaje: HOLA + 'Armo sistemas para comercios: control de stock con aviso de faltantes, ventas, cuenta corriente de clientes y reportes simples desde el celular.' + DEMO, rubros: [
+    ['ferreteria', 'Ferreterías', 'shop=hardware', 'ferretería'],
+    ['corralon', 'Corralones / materiales', 'shop=doityourself', 'corralón'],
+    ['petshop', 'Pet shops', 'shop=pet', 'pet shop'],
+    ['panaderia', 'Panaderías', 'shop=bakery', 'panadería'],
+    ['ropa', 'Ropa', 'shop=clothes', 'local de ropa'],
+    ['libreria', 'Librerías', 'shop=stationery', 'librería'],
+  ] },
+  servicios: { nombre: 'Servicios', mensaje: HOLA + 'Armo sistemas para negocios de servicios: pedidos, estado de cada trabajo, aviso al cliente cuando está listo y control de cobros.' + DEMO, rubros: [
+    ['imprenta', 'Imprentas / fotocopias', 'shop=copyshop', 'imprenta'],
+    ['lavanderia', 'Lavanderías', 'shop=laundry', 'lavandería'],
+    ['cerrajeria', 'Cerrajerías', 'shop=locksmith', 'cerrajería'],
+    ['celulares', 'Arreglo de celulares', 'shop=mobile_phone', 'arreglo de celulares'],
+  ] },
+};
+// Todos los rubros en una lista, cada uno sabiendo a qué sector pertenece
+const RUBROS = Object.entries(SECTORES).flatMap(([sector, s]) => s.rubros.map(([id, nombre, tag, google]) => ({ id, nombre, tag: tag.split('='), google, sector })));
 const ESTADOS = ['Por contactar', 'Contactado', 'Interesado', 'Cliente', 'No le interesa'];
 const PLANTILLAS = {
-  es: 'Hola, ¿qué tal? Soy Felipe, de Selenium Systems. Vi {nombre} en {ciudad} y les quería contar de un sistema de gestión que armé para talleres de muebles: pedidos, clientes, producción, presupuestos en PDF y aviso de entregas, todo desde el celular. Ya lo usa un taller de amoblamientos. ¿Les interesa que les muestre una demo de 10 minutos?',
-  pt: 'Olá, tudo bem? Sou Felipe, da Selenium Systems. Vi {nombre} em {ciudad} e queria apresentar um sistema de gestão que criei para marcenarias: pedidos, clientes, produção, orçamentos em PDF e alertas de entrega, tudo pelo celular. Posso mostrar uma demo de 10 minutos?',
-  en: 'Hi! I\'m Felipe from Selenium Systems. I came across {nombre} in {ciudad} and wanted to tell you about a management system I built for furniture workshops: orders, clients, production, PDF quotes and delivery alerts, all from your phone. Would you like a 10-minute demo?',
+  pt: 'Olá, tudo bem? Sou Felipe, da Selenium Systems. Vi {nombre} em {ciudad} e queria apresentar um sistema de gestão feito sob medida para {rubro}, tudo pelo celular. Posso mostrar uma demo de 10 minutos?',
+  en: 'Hi! I\'m Felipe from Selenium Systems. I came across {nombre} in {ciudad} and wanted to tell you about a custom management system for {rubro}, all from your phone. Would you like a 10-minute demo?',
 };
 const CLAVE = 'buscador-clientes-v1';
 // Atajos de zona: de lo más cercano a lo más amplio
@@ -253,8 +295,14 @@ const $ = (id) => document.getElementById(id);
 let datos = cargar();
 
 function cargar() {
-  try { return JSON.parse(localStorage.getItem(CLAVE)) || { leads: {}, plantilla: PLANTILLAS.es }; }
-  catch { return { leads: {}, plantilla: PLANTILLAS.es }; }
+  let d;
+  try { d = JSON.parse(localStorage.getItem(CLAVE)); } catch { /* sin almacenamiento */ }
+  d = d || { leads: {} };
+  d.plantillas = d.plantillas || {};
+  // Versiones viejas tenían una sola plantilla (la de muebles): la pasamos a su sector
+  if (d.plantilla && d.plantilla !== SECTORES.muebles.mensaje) d.plantillas.muebles = d.plantilla;
+  delete d.plantilla;
+  return d;
 }
 function guardar() {
   try { localStorage.setItem(CLAVE, JSON.stringify(datos)); } catch { /* sin almacenamiento: sigue andando en memoria */ }
@@ -364,7 +412,7 @@ async function buscarEnGoogle(zona, rubros) {
       uso.pedidos++; guardar();
       const json = await r.json();
       if (!r.ok) throw new Error('Google Maps dijo: ' + (json.error?.message || r.status) + '. Revisá que la clave sea correcta y tenga habilitada "Places API (New)".');
-      for (const p of json.places || []) lugares.push({ ...p, rubro: rubro.nombre });
+      for (const p of json.places || []) lugares.push({ ...p, rubro: rubro.nombre, sector: rubro.sector });
       pagina = json.nextPageToken;
       if (!pagina) break;
     }
@@ -383,6 +431,7 @@ function aLeadGoogle(p) {
     id: 'g/' + p.id,
     nombre: p.displayName?.text || '',
     rubro: p.rubro,
+    sector: p.sector,
     ciudad: ciudadDeDireccion(p.formattedAddress),
     direccion: p.formattedAddress || '',
     telefono: p.internationalPhoneNumber || p.nationalPhoneNumber || '',
@@ -407,6 +456,7 @@ function aLead(el, zona) {
     id: el.type + '/' + el.id,
     nombre: t.name || '',
     rubro: rubro ? rubro.nombre : '',
+    sector: rubro ? rubro.sector : sectorActual(),
     ciudad: t['addr:city'] || zona.split(',')[0],
     direccion: [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '),
     telefono: t.phone || t['contact:phone'] || t.mobile || t['contact:mobile'] || t['contact:whatsapp'] || '',
@@ -422,7 +472,7 @@ function aLead(el, zona) {
 
 async function buscar() {
   const zona = $('zona').value.trim();
-  const rubros = RUBROS.filter((r) => $('r-' + r.id).checked);
+  const rubros = RUBROS.filter((r) => $('r-' + r.id)?.checked);
   if (!zona) return avisar('Escribí una zona.');
   if (!rubros.length) return avisar('Elegí al menos un rubro.');
   $('buscar').disabled = true;
@@ -474,7 +524,8 @@ function numeroWhatsApp(tel) {
 }
 
 function mensaje(lead) {
-  return datos.plantilla.replaceAll('{nombre}', lead.nombre || 'su negocio').replaceAll('{ciudad}', lead.ciudad.split(' · ')[0] || 'su zona').replaceAll('{rubro}', lead.rubro.toLowerCase());
+  const sector = SECTORES[lead.sector] ? lead.sector : 'muebles';
+  return (datos.plantillas[sector] || SECTORES[sector].mensaje).replaceAll('{nombre}', lead.nombre || 'su negocio').replaceAll('{ciudad}', lead.ciudad.split(' · ')[0] || 'su zona').replaceAll('{rubro}', lead.rubro.toLowerCase());
 }
 
 // Distancia en línea recta (fórmula de haversine): sin pedirle nada a nadie
@@ -623,11 +674,26 @@ function exportar() {
 $('zona').value = datos.origen ? MI_PUNTO : ATAJOS[1];
 $('atajos').innerHTML = [MI_PUNTO, ...ATAJOS].map((z) => `<button class="sec" data-zona="${esc(z)}">${esc(z.split(',')[0])}</button>`).join('');
 $('atajos').addEventListener('click', (e) => { if (e.target.dataset.zona) $('zona').value = e.target.dataset.zona; });
-$('rubros').innerHTML = RUBROS.map((r) => `<label><input type="checkbox" id="r-${r.id}"${r.extra ? '' : ' checked'}> ${r.nombre}</label>`).join('');
+function sectorActual() { return $('sector').value || 'muebles'; }
+function mostrarRubros() {
+  $('rubros').innerHTML = RUBROS.filter((r) => r.sector === sectorActual()).map((r) => `<label><input type="checkbox" id="r-${r.id}" checked> ${r.nombre}</label>`).join('');
+}
+function mostrarPlantilla() {
+  $('sectorMensaje').textContent = SECTORES[sectorActual()].nombre.toLowerCase();
+  $('plantilla').value = datos.plantillas[sectorActual()] || SECTORES[sectorActual()].mensaje;
+}
+$('sector').innerHTML = Object.entries(SECTORES).map(([id, s]) => `<option value="${id}">${s.nombre}</option>`).join('');
+try { $('sector').value = localStorage.getItem(CLAVE + '-sector') || 'muebles'; } catch {}
+$('sector').addEventListener('change', () => { try { localStorage.setItem(CLAVE + '-sector', sectorActual()); } catch {} mostrarRubros(); mostrarPlantilla(); });
+mostrarRubros();
 $('filtroEstado').innerHTML += ESTADOS.map((e) => `<option>${e}</option>`).join('');
-$('plantilla').value = datos.plantilla;
-$('plantilla').addEventListener('input', (e) => { datos.plantilla = e.target.value; guardar(); dibujar(); });
-document.querySelectorAll('[data-idioma]').forEach((b) => b.addEventListener('click', () => { datos.plantilla = $('plantilla').value = PLANTILLAS[b.dataset.idioma]; guardar(); dibujar(); }));
+mostrarPlantilla();
+$('plantilla').addEventListener('input', (e) => { datos.plantillas[sectorActual()] = e.target.value; guardar(); dibujar(); });
+document.querySelectorAll('[data-idioma]').forEach((b) => b.addEventListener('click', () => {
+  // en español vuelve al mensaje original del sector
+  if (b.dataset.idioma === 'es') delete datos.plantillas[sectorActual()]; else datos.plantillas[sectorActual()] = PLANTILLAS[b.dataset.idioma];
+  mostrarPlantilla(); guardar(); dibujar();
+}));
 try { $('claveGoogle').value = localStorage.getItem(CLAVE + '-google') || ''; } catch {}
 $('claveGoogle').addEventListener('change', (e) => { try { localStorage.setItem(CLAVE + '-google', e.target.value.trim()); } catch {} });
 document.querySelectorAll('input[name=fuente]').forEach((r) => r.addEventListener('change', () => { $('panelGoogle').hidden = fuente() !== 'google'; mostrarUso(); }));
@@ -659,7 +725,7 @@ $('backup').addEventListener('click', () => {
   a.download = 'clientes-copia-' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
 });
-const CAMPOS = ['nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'maps', 'instagram', 'facebook', 'rating', 'nota', 'fecha'];
+const CAMPOS = ['sector', 'nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'maps', 'instagram', 'facebook', 'rating', 'nota', 'fecha'];
 function limpiarLead(l, id) {
   const limpio = { id: String(id), estado: ESTADOS.includes(l?.estado) ? l.estado : ESTADOS[0] };
   for (const c of CAMPOS) limpio[c] = typeof l?.[c] === 'string' ? l[c].slice(0, 500) : '';
@@ -675,7 +741,9 @@ $('archivo').addEventListener('change', async (e) => {
     if (!copia.leads || typeof copia.leads !== 'object') throw new Error();
     // Un archivo puede venir tocado: copiamos solo los campos que conocemos, como texto
     for (const [id, l] of Object.entries(copia.leads)) datos.leads[String(id)] = limpiarLead(l, id);
-    if (typeof copia.plantilla === 'string') datos.plantilla = $('plantilla').value = copia.plantilla;
+    for (const [sec, txt] of Object.entries(copia.plantillas || {})) if (SECTORES[sec] && typeof txt === 'string') datos.plantillas[sec] = txt;
+    if (typeof copia.plantilla === 'string') datos.plantillas.muebles = copia.plantilla; // copias viejas
+    mostrarPlantilla();
     guardar(); dibujar();
     avisar('Copia cargada: ' + Object.keys(copia.leads).length + ' contactos.');
   } catch { avisar('Ese archivo no es una copia del buscador.'); }
