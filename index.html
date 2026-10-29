@@ -120,6 +120,10 @@
       <label for="zona">Zona (ciudad, provincia o país)</label>
       <input type="text" id="zona" placeholder="Ej: Córdoba, Argentina · Provincia de Santa Fe · Uruguay">
     </div>
+    <div style="flex:0 0 150px">
+      <label for="radio">Distancia</label>
+      <select id="radio"><option value="5" selected>5 km a la redonda</option><option value="10">10 km a la redonda</option><option value="20">20 km a la redonda</option><option value="0">Toda la zona</option></select>
+    </div>
     <div style="flex:0 0 auto"><button id="buscar">Buscar</button></div>
   </div>
   <div class="atajos" id="atajos"></div>
@@ -155,7 +159,7 @@
 <section class="card">
   <h2>Contactos</h2>
   <div class="row">
-    <div><label for="origen">Punto de partida, para ver a cuántos km queda cada uno (se guarda solo en este navegador)</label><input type="text" id="origen" placeholder="Ej: Calle 1234, Localidad"></div>
+    <div><label for="origen">Punto de partida, para ver a cuántos km queda cada uno (se guarda solo en este navegador)</label><input type="text" id="origen" placeholder="Calle 1234, Localidad (con la localidad, si no la confunde con otra ciudad)"></div>
     <div style="flex:0 0 auto"><button class="sec" id="calcularKm">Calcular km</button></div>
   </div>
   <p class="nota" id="origenTexto"></p>
@@ -163,6 +167,7 @@
   <div class="row">
     <div><label for="filtroTexto">Filtrar</label><input type="text" id="filtroTexto" placeholder="Nombre, ciudad…"></div>
     <div><label for="filtroEstado">Estado</label><select id="filtroEstado"><option value="">Todos</option></select></div>
+    <div style="flex:0 0 160px"><label for="filtroKm">Distancia</label><select id="filtroKm"><option value="">Todas</option><option value="5">Hasta 5 km</option><option value="10">Hasta 10 km</option><option value="20">Hasta 20 km</option></select></div>
     <div style="flex:0 0 auto"><label class="chk"><input type="checkbox" id="filtroSinWeb"> Solo sin web</label></div>
     <div style="flex:0 0 auto"><button class="sec" id="exportar">Exportar CSV</button></div>
     <div style="flex:0 0 auto"><button class="sec" id="backup">Guardar copia</button></div>
@@ -221,18 +226,30 @@ function esc(s) {
 }
 
 // 1) Convertir el nombre de la zona en un rectángulo del mapa
-async function buscarZona(texto) {
+const MI_PUNTO = 'Mi punto de partida';
+async function buscarZona(texto, radio) {
+  if (texto === MI_PUNTO) {
+    if (!datos.origen) throw new Error('Primero cargá tu punto de partida, abajo en "Contactos".');
+    return enRadio({ lat: datos.origen.lat, lon: datos.origen.lon }, radio, datos.origen.nombre, 'ar');
+  }
   const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=' + encodeURIComponent(texto);
   const r = await fetch(url, { headers: { 'Accept-Language': 'es' } });
   if (!r.ok) throw new Error('No pude buscar la zona (' + r.status + ')');
   const [lugar] = await r.json();
   if (!lugar) throw new Error('No encontré esa zona. Probá con "Ciudad, Provincia, País".');
+  if (radio) return enRadio({ lat: Number(lugar.lat), lon: Number(lugar.lon) }, radio, lugar.display_name, lugar.address?.country_code);
   let [sur, norte, oeste, este] = lugar.boundingbox.map(Number);
   // Algunos barrios son solo un punto en el mapa: buscamos 4 km a la redonda
   const punto = norte - sur < 0.02;
   if (punto) { sur -= 0.036; norte += 0.036; oeste -= 0.044; este += 0.044; }
   // el rectángulo de un país toca a los vecinos: nos quedamos solo con ese país
   return { caja: [oeste, norte, este, sur].join(','), pais: lugar.address?.country_code || '', nombre: lugar.display_name + (punto ? ' (4 km a la redonda)' : '') };
+}
+
+// Un cuadrado alrededor del centro; después se descartan las esquinas, que quedan más lejos que el radio
+function enRadio(centro, radio, nombre, pais) {
+  const dLat = radio / 111, dLon = radio / (111 * Math.cos(centro.lat * Math.PI / 180));
+  return { caja: [centro.lon - dLon, centro.lat + dLat, centro.lon + dLon, centro.lat - dLat].join(','), pais: pais || '', centro, radio, nombre: `${nombre} (${radio} km a la redonda)` };
 }
 
 // 2) Pedirle a Nominatim los comercios de cada rubro dentro de ese rectángulo.
@@ -372,9 +389,10 @@ async function buscar() {
       mostrarUso();
     } else {
       avisar('Buscando la zona…');
-      const area = await buscarZona(zona);
+      const area = await buscarZona(zona, Number($('radio').value));
       avisar('Buscando comercios en ' + area.nombre + '…');
-      encontrados = (await buscarComercios(area, rubros)).map((el) => aLead(el, area.nombre));
+      encontrados = (await buscarComercios(area, rubros)).map((el) => aLead(el, area.nombre))
+        .filter((l) => !area.radio || distancia(area.centro, l) <= area.radio);
       nombreZona = area.nombre;
     }
     const yaEstan = new Set(Object.values(datos.leads).map((l) => clave(l.nombre)).filter(Boolean));
@@ -414,13 +432,12 @@ function mensaje(lead) {
 }
 
 // Distancia en línea recta (fórmula de haversine): sin pedirle nada a nadie
-function km(l) {
-  const o = datos.origen;
-  if (!o || l.lat == null) return null;
+function distancia(a, b) {
   const rad = (g) => g * Math.PI / 180;
-  const a = Math.sin(rad(l.lat - o.lat) / 2) ** 2 + Math.cos(rad(o.lat)) * Math.cos(rad(l.lat)) * Math.sin(rad(l.lon - o.lon) / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(a));
+  const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
+const km = (l) => (datos.origen && l.lat != null ? distancia(datos.origen, l) : null);
 
 async function calcularKm() {
   const texto = $('origen').value.trim();
@@ -432,6 +449,7 @@ async function calcularKm() {
     const [lugar] = await r.json();
     if (!lugar) throw new Error('No encontré esa dirección. Probá agregando la localidad y la provincia.');
     datos.origen = { texto, lat: Number(lugar.lat), lon: Number(lugar.lon), nombre: lugar.display_name };
+    $('zona').value = MI_PUNTO; // así el próximo "Buscar" busca alrededor de tu casa
     guardar(); dibujar();
   } catch (e) { $('origenTexto').textContent = e.message; }
 }
@@ -440,10 +458,12 @@ function filtrados() {
   const txt = $('filtroTexto').value.trim().toLowerCase();
   const est = $('filtroEstado').value;
   const sinWeb = $('filtroSinWeb').checked;
+  const hasta = Number($('filtroKm').value);
   return Object.values(datos.leads).filter((l) =>
     (!txt || (l.nombre + ' ' + l.ciudad + ' ' + l.rubro).toLowerCase().includes(txt)) &&
     (!est || l.estado === est) &&
-    (!sinWeb || !l.web)
+    (!sinWeb || !l.web) &&
+    (!hasta || (km(l) ?? Infinity) <= hasta)
   ).sort((a, b) => (datos.origen ? (km(a) ?? 1e9) - (km(b) ?? 1e9) : 0) || a.ciudad.localeCompare(b.ciudad) || a.nombre.localeCompare(b.nombre));
 }
 
@@ -488,8 +508,8 @@ function exportar() {
 }
 
 // Arranque
-$('zona').value = ATAJOS[1];
-$('atajos').innerHTML = ATAJOS.map((z) => `<button class="sec" data-zona="${esc(z)}">${esc(z.split(',')[0])}</button>`).join('');
+$('zona').value = datos.origen ? MI_PUNTO : ATAJOS[1];
+$('atajos').innerHTML = [MI_PUNTO, ...ATAJOS].map((z) => `<button class="sec" data-zona="${esc(z)}">${esc(z.split(',')[0])}</button>`).join('');
 $('atajos').addEventListener('click', (e) => { if (e.target.dataset.zona) $('zona').value = e.target.dataset.zona; });
 $('rubros').innerHTML = RUBROS.map((r) => `<label><input type="checkbox" id="r-${r.id}" checked> ${r.nombre}</label>`).join('');
 $('filtroEstado').innerHTML += ESTADOS.map((e) => `<option>${e}</option>`).join('');
@@ -504,7 +524,7 @@ $('calcularKm').addEventListener('click', calcularKm);
 $('origen').addEventListener('keydown', (e) => { if (e.key === 'Enter') calcularKm(); });
 $('origen').value = datos.origen?.texto || '';
 $('zona').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(); });
-['filtroTexto', 'filtroEstado', 'filtroSinWeb'].forEach((id) => $(id).addEventListener('input', dibujar));
+['filtroTexto', 'filtroEstado', 'filtroSinWeb', 'filtroKm'].forEach((id) => $(id).addEventListener('input', dibujar));
 $('exportar').addEventListener('click', exportar);
 $('borrar').addEventListener('click', () => { if (confirm('¿Borrar toda la lista?')) { datos.leads = {}; guardar(); dibujar(); } });
 $('filas').addEventListener('change', (e) => {
