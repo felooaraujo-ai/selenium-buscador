@@ -46,6 +46,11 @@
   .row > * { flex:1 1 200px; }
   .atajos { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   .atajos button { height:28px; padding:0 12px; font-size:13px; border-radius:14px; }
+  .fuente { display:flex; flex-wrap:wrap; align-items:center; gap:8px 22px; margin-top:16px; }
+  .fuente-titulo { font-size:13px; color:var(--texto2); }
+  input[type=radio] { accent-color:var(--marca); width:16px; height:16px; vertical-align:-3px; margin:0 6px 0 0; }
+  .google { margin-top:12px; padding:12px; border-radius:8px; background:#f5fafe; border:1px solid #d1e8ff; }
+  .rating { display:block; font-size:12px; font-weight:400; color:var(--texto2); margin-top:2px; }
   .rubros { display:flex; flex-wrap:wrap; gap:10px 22px; margin:16px 0 12px; padding-top:16px; border-top:1px solid var(--borde); }
   .rubros label, .chk { color:var(--texto); font-size:14px; margin:0; }
 
@@ -117,6 +122,17 @@
     <div style="flex:0 0 auto"><button id="buscar">Buscar</button></div>
   </div>
   <div class="atajos" id="atajos"></div>
+  <div class="fuente">
+    <span class="fuente-titulo">Buscar en</span>
+    <label class="chk"><input type="radio" name="fuente" value="osm" checked> OpenStreetMap (gratis)</label>
+    <label class="chk"><input type="radio" name="fuente" value="google"> Google Maps (más comercios, con teléfono)</label>
+  </div>
+  <div class="google" id="panelGoogle" hidden>
+    <div class="row">
+      <div><label for="claveGoogle">Clave de Google Maps (Places API New). Queda guardada solo en este navegador.</label><input type="password" id="claveGoogle" placeholder="AIza…" autocomplete="off"></div>
+    </div>
+    <p class="nota" id="usoGoogle"></p>
+  </div>
   <div class="rubros" id="rubros"></div>
   <label class="chk"><input type="checkbox" id="soloConNombre" checked> Solo los que tienen nombre</label>
   <div id="estado"></div>
@@ -160,12 +176,12 @@
 <script>
 // Rubros: cada uno es una etiqueta de OpenStreetMap
 const RUBROS = [
-  { id: 'carpinteria', nombre: 'Carpinterías', tag: ['craft', 'carpenter'] },
-  { id: 'ebanisteria', nombre: 'Fábricas de muebles / ebanistas', tag: ['craft', 'cabinet_maker'] },
-  { id: 'aberturas', nombre: 'Carpintería de obra / aberturas', tag: ['craft', 'joiner'] },
-  { id: 'muebleria', nombre: 'Mueblerías', tag: ['shop', 'furniture'] },
-  { id: 'cocinas', nombre: 'Cocinas a medida', tag: ['shop', 'kitchen'] },
-  { id: 'tapiceria', nombre: 'Tapicerías', tag: ['craft', 'upholsterer'] },
+  { id: 'carpinteria', nombre: 'Carpinterías', tag: ['craft', 'carpenter'], google: 'carpintería' },
+  { id: 'ebanisteria', nombre: 'Fábricas de muebles / ebanistas', tag: ['craft', 'cabinet_maker'], google: 'fábrica de muebles' },
+  { id: 'aberturas', nombre: 'Carpintería de obra / aberturas', tag: ['craft', 'joiner'], google: 'aberturas de madera' },
+  { id: 'muebleria', nombre: 'Mueblerías', tag: ['shop', 'furniture'], google: 'mueblería' },
+  { id: 'cocinas', nombre: 'Cocinas a medida', tag: ['shop', 'kitchen'], google: 'muebles de cocina a medida' },
+  { id: 'tapiceria', nombre: 'Tapicerías', tag: ['craft', 'upholsterer'], google: 'tapicería' },
 ];
 const ESTADOS = ['Por contactar', 'Contactado', 'Interesado', 'Cliente', 'No le interesa'];
 const PLANTILLAS = {
@@ -241,6 +257,76 @@ async function buscarComercios(zona, rubros) {
   throw new Error('Los servidores de mapas no respondieron. Esperá un minuto y probá de nuevo, o elegí una zona más chica.');
 }
 
+// ---- Google Maps (Places API New) ----
+// Pedir teléfono y web hace que cada pedido cuente como "Enterprise": Google regala 1.000 por mes.
+const GOOGLE_GRATIS = 1000;
+const CAMPOS_GOOGLE = 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.location,places.businessStatus,places.rating,places.userRatingCount,nextPageToken';
+
+function usoDelMes() {
+  const mes = new Date().toISOString().slice(0, 7);
+  if (!datos.uso || datos.uso.mes !== mes) datos.uso = { mes, pedidos: 0 };
+  return datos.uso;
+}
+function mostrarUso() {
+  $('usoGoogle').textContent = `Este mes usaste ${usoDelMes().pedidos} de ${GOOGLE_GRATIS} pedidos gratis (cuenta aproximada de este navegador). Cada rubro usa de 1 a 3 pedidos.`;
+}
+
+async function buscarEnGoogle(zona, rubros) {
+  const clave = $('claveGoogle').value.trim();
+  if (!clave) throw new Error('Pegá tu clave de Google Maps.');
+  const uso = usoDelMes();
+  const lugares = [];
+  for (const rubro of rubros) {
+    let pagina = '';
+    for (let n = 0; n < 3; n++) { // hasta 3 páginas de 20 = 60 por rubro
+      if (uso.pedidos >= GOOGLE_GRATIS - 20 && !confirm('Estás por pasarte de los pedidos gratis del mes y Google te va a cobrar. ¿Seguir igual?')) return lugares;
+      avisar(`Buscando "${rubro.google}" en Google Maps… (${lugares.length} encontrados)`);
+      let r;
+      try {
+        r = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': clave, 'X-Goog-FieldMask': CAMPOS_GOOGLE },
+          body: JSON.stringify({ textQuery: `${rubro.google} en ${zona}`, languageCode: 'es', pageSize: 20, ...(pagina && { pageToken: pagina }) }),
+        });
+      } catch { throw new Error('No pude conectarme con Google Maps. Revisá tu internet.'); }
+      uso.pedidos++; guardar();
+      const json = await r.json();
+      if (!r.ok) throw new Error('Google Maps dijo: ' + (json.error?.message || r.status) + '. Revisá que la clave sea correcta y tenga habilitada "Places API (New)".');
+      for (const p of json.places || []) lugares.push({ ...p, rubro: rubro.nombre });
+      pagina = json.nextPageToken;
+      if (!pagina) break;
+    }
+  }
+  return lugares;
+}
+
+function ciudadDeDireccion(direccion) {
+  // "Av. X 123, B1678 Caseros, Provincia de Buenos Aires, Argentina" → "Caseros"
+  const partes = (direccion || '').split(',').map((x) => x.trim());
+  return (partes.length >= 3 ? partes[partes.length - 3] : partes[0] || '').replace(/^[A-Z]?\d{4}[A-Z]{0,3}\s+/, '');
+}
+
+function aLeadGoogle(p) {
+  return {
+    id: 'g/' + p.id,
+    nombre: p.displayName?.text || '',
+    rubro: p.rubro,
+    ciudad: ciudadDeDireccion(p.formattedAddress),
+    direccion: p.formattedAddress || '',
+    telefono: p.internationalPhoneNumber || p.nationalPhoneNumber || '',
+    email: '', instagram: '', facebook: '',
+    web: p.websiteUri || '',
+    maps: p.googleMapsUri || '',
+    rating: p.rating ? `★ ${p.rating} (${p.userRatingCount || 0} reseñas)` : '',
+    lat: p.location?.latitude, lon: p.location?.longitude,
+    estado: ESTADOS[0],
+    nota: '',
+  };
+}
+
+// Mismo comercio encontrado en las dos fuentes: lo reconocemos por el nombre
+const clave = (nombre) => nombre.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+
 function aLead(el, zona) {
   const t = el.tags || {};
   const rubro = RUBROS.find((r) => t[r.tag[0]] === r.tag[1]);
@@ -269,20 +355,31 @@ async function buscar() {
   if (!rubros.length) return avisar('Elegí al menos un rubro.');
   $('buscar').disabled = true;
   try {
-    avisar('Buscando la zona…');
-    const area = await buscarZona(zona);
-    avisar('Buscando comercios en ' + area.nombre + '…');
-    const elementos = await buscarComercios(area, rubros);
+    let encontrados, nombreZona;
+    if (fuente() === 'google') {
+      const lugares = await buscarEnGoogle(zona, rubros);
+      encontrados = lugares.filter((p) => p.businessStatus !== 'CLOSED_PERMANENTLY').map(aLeadGoogle);
+      nombreZona = zona;
+      mostrarUso();
+    } else {
+      avisar('Buscando la zona…');
+      const area = await buscarZona(zona);
+      avisar('Buscando comercios en ' + area.nombre + '…');
+      encontrados = (await buscarComercios(area, rubros)).map((el) => aLead(el, area.nombre));
+      nombreZona = area.nombre;
+    }
+    const yaEstan = new Set(Object.values(datos.leads).map((l) => clave(l.nombre)).filter(Boolean));
     let nuevos = 0;
-    for (const el of elementos) {
-      const lead = aLead(el, area.nombre);
+    for (const lead of encontrados) {
       if ($('soloConNombre').checked && !lead.nombre) continue;
-      if (datos.leads[lead.id]) continue; // ya estaba: no pisamos su estado ni su nota
+      // ya estaba: no pisamos su estado ni su nota
+      if (datos.leads[lead.id] || (lead.nombre && yaEstan.has(clave(lead.nombre)))) continue;
       datos.leads[lead.id] = lead;
+      yaEstan.add(clave(lead.nombre));
       nuevos++;
     }
     guardar();
-    avisar(`Listo: ${elementos.length} encontrados en ${area.nombre}, ${nuevos} nuevos en tu lista.`);
+    avisar(`Listo: ${encontrados.length} encontrados en ${nombreZona}, ${nuevos} nuevos en tu lista.`);
     dibujar();
   } catch (e) {
     avisar('Error: ' + e.message);
@@ -290,6 +387,8 @@ async function buscar() {
     $('buscar').disabled = false;
   }
 }
+
+function fuente() { return document.querySelector('input[name=fuente]:checked').value; }
 
 function avisar(texto) { $('estado').textContent = texto; }
 
@@ -325,12 +424,12 @@ function dibujar() {
   $('contador').textContent = `${lista.length} de ${Object.keys(datos.leads).length} en tu lista`;
   $('filas').innerHTML = lista.map((l, i) => {
     const tel = numeroWhatsApp(l.telefono);
-    const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
+    const maps = l.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
     const contacto = [l.telefono && l.telefono.replaceAll(' ', '\u00a0').replaceAll('-', '\u2011'), l.email, l.instagram && 'IG: ' + l.instagram, l.direccion].filter(Boolean).map(esc).join('<br>');
     return `<tr>
       <td class="idx">${String(i + 1).padStart(3, '0')}</td>
       <td><select data-id="${esc(l.id)}" class="cambiarEstado e-${l.estado.replaceAll(' ', '-')}">${ESTADOS.map((e) => `<option${e === l.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></td>
-      <td class="nombre">${esc(l.nombre) || '<i>(sin nombre)</i>'}</td>
+      <td class="nombre">${esc(l.nombre) || '<i>(sin nombre)</i>'}${l.rating ? `<span class="rating">${esc(l.rating)}</span>` : ''}</td>
       <td>${esc(l.rubro)}</td>
       <td>${esc(l.ciudad)}</td>
       <td>${contacto || '<span class="nota">Buscalo en Maps</span>'}</td>
@@ -346,7 +445,7 @@ function dibujar() {
 }
 
 function exportar() {
-  const cols = ['estado', 'fecha', 'nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'instagram', 'facebook', 'lat', 'lon', 'nota'];
+  const cols = ['estado', 'fecha', 'nombre', 'rubro', 'ciudad', 'direccion', 'telefono', 'email', 'web', 'rating', 'maps', 'instagram', 'facebook', 'lat', 'lon', 'nota'];
   const csv = [cols.join(',')].concat(filtrados().map((l) => cols.map((c) => '"' + String(l[c] ?? '').replaceAll('"', '""') + '"').join(','))).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); // ﻿: para que Excel lea bien los acentos
@@ -363,6 +462,9 @@ $('filtroEstado').innerHTML += ESTADOS.map((e) => `<option>${e}</option>`).join(
 $('plantilla').value = datos.plantilla;
 $('plantilla').addEventListener('input', (e) => { datos.plantilla = e.target.value; guardar(); dibujar(); });
 document.querySelectorAll('[data-idioma]').forEach((b) => b.addEventListener('click', () => { datos.plantilla = $('plantilla').value = PLANTILLAS[b.dataset.idioma]; guardar(); dibujar(); }));
+try { $('claveGoogle').value = localStorage.getItem(CLAVE + '-google') || ''; } catch {}
+$('claveGoogle').addEventListener('change', (e) => { try { localStorage.setItem(CLAVE + '-google', e.target.value.trim()); } catch {} });
+document.querySelectorAll('input[name=fuente]').forEach((r) => r.addEventListener('change', () => { $('panelGoogle').hidden = fuente() !== 'google'; mostrarUso(); }));
 $('buscar').addEventListener('click', buscar);
 $('zona').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(); });
 ['filtroTexto', 'filtroEstado', 'filtroSinWeb'].forEach((id) => $(id).addEventListener('input', dibujar));
