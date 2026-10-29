@@ -96,6 +96,28 @@
   td input.nota-in { height:30px; font-size:13px; min-width:160px; }
   .fecha { display:block; font-size:11px; color:var(--texto2); margin-top:3px; }
   .contador { font-size:16px; font-weight:700; margin:20px 0 10px; }
+  /* Ficha del local: panel al costado de la lista */
+  tbody tr { cursor:pointer; }
+  tbody tr.elegido { background:var(--marca-suave); box-shadow:inset 3px 0 0 var(--marca); }
+  .ficha { position:fixed; top:0; right:0; bottom:0; width:min(400px, 100vw); background:#fff; box-shadow:-4px 0 24px rgba(11,31,58,.18); z-index:10; display:flex; flex-direction:column; }
+  .ficha[hidden] { display:none; }
+  .ficha-cab { padding:16px 20px; border-bottom:1px solid var(--borde); display:flex; gap:12px; align-items:flex-start; }
+  .ficha-cab h3 { margin:0; font-size:18px; }
+  .ficha-cab .sub { font-size:13px; color:var(--texto2); margin-top:2px; }
+  .ficha-cab button { margin-left:auto; flex:none; height:32px; padding:0 10px; }
+  .ficha-cuerpo { padding:16px 20px; overflow:auto; flex:1; }
+  .ficha h4 { margin:18px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--texto2); }
+  .dato { display:grid; grid-template-columns:90px minmax(0,1fr); gap:8px; padding:8px 0; border-bottom:1px solid var(--borde); font-size:14px; }
+  .dato span { color:var(--texto2); font-size:13px; }
+  .dato a, .dato b { overflow-wrap:anywhere; }
+  .botones { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .botones a { display:inline-flex; align-items:center; height:36px; padding:0 14px; border-radius:8px; border:1px solid var(--marca); background:var(--marca); color:#fff; font-weight:600; }
+  .botones a.sec { background:#fff; color:var(--marca); border-color:var(--borde-campo); font-weight:400; }
+  .botones a:hover { text-decoration:none; filter:brightness(.95); }
+  .sin-datos { padding:12px; border-radius:8px; background:var(--critico-bg); color:#a04600; font-size:13px; }
+  .con { display:inline-block; font-size:11px; font-weight:600; padding:1px 6px; border-radius:8px; background:var(--positivo-bg); color:var(--positivo); margin:2px 4px 0 0; }
+  @media (min-width:1100px) { body.con-ficha { padding-right:400px; } } /* en pantallas anchas la lista se corre y no queda tapada */
+  @media (max-width:600px) { .ficha { top:auto; height:85vh; width:100vw; border-radius:16px 16px 0 0; } }
   @media (max-width:600px) { header p { display:none; } .card { padding:16px; } }
 </style>
 </head>
@@ -168,6 +190,7 @@
     <div><label for="filtroTexto">Filtrar</label><input type="text" id="filtroTexto" placeholder="Nombre, ciudad…"></div>
     <div><label for="filtroEstado">Estado</label><select id="filtroEstado"><option value="">Todos</option></select></div>
     <div style="flex:0 0 160px"><label for="filtroKm">Distancia</label><select id="filtroKm"><option value="">Todas</option><option value="5">Hasta 5 km</option><option value="10">Hasta 10 km</option><option value="20">Hasta 20 km</option></select></div>
+    <div style="flex:0 0 190px"><label for="filtroContacto">Datos de contacto</label><select id="filtroContacto"><option value="">Todos</option><option value="alguno">Con teléfono o mail</option><option value="tel">Con teléfono</option><option value="mail">Con mail</option><option value="ambos">Con teléfono y mail</option></select></div>
     <div style="flex:0 0 auto"><label class="chk"><input type="checkbox" id="filtroSinWeb"> Solo sin web</label></div>
     <div style="flex:0 0 auto"><button class="sec" id="exportar">Exportar CSV</button></div>
     <div style="flex:0 0 auto"><button class="sec" id="backup">Guardar copia</button></div>
@@ -184,6 +207,7 @@
 </section>
 
 </main>
+<aside class="ficha" id="ficha" hidden></aside>
 <script>
 // Rubros: cada uno es una etiqueta de OpenStreetMap
 const RUBROS = [
@@ -363,7 +387,7 @@ function aLead(el, zona) {
     rubro: rubro ? rubro.nombre : '',
     ciudad: t['addr:city'] || zona.split(',')[0],
     direccion: [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '),
-    telefono: t.phone || t['contact:phone'] || t['contact:mobile'] || t['contact:whatsapp'] || '',
+    telefono: t.phone || t['contact:phone'] || t.mobile || t['contact:mobile'] || t['contact:whatsapp'] || '',
     email: t.email || t['contact:email'] || '',
     web: t.website || t['contact:website'] || '',
     instagram: t['contact:instagram'] || '',
@@ -459,11 +483,14 @@ function filtrados() {
   const est = $('filtroEstado').value;
   const sinWeb = $('filtroSinWeb').checked;
   const hasta = Number($('filtroKm').value);
+  const con = $('filtroContacto').value;
+  const pasaContacto = (l) => !con || (con === 'tel' ? l.telefono : con === 'mail' ? l.email : con === 'ambos' ? l.telefono && l.email : l.telefono || l.email);
   return Object.values(datos.leads).filter((l) =>
     (!txt || (l.nombre + ' ' + l.ciudad + ' ' + l.rubro).toLowerCase().includes(txt)) &&
     (!est || l.estado === est) &&
     (!sinWeb || !l.web) &&
-    (!hasta || (km(l) ?? Infinity) <= hasta)
+    (!hasta || (km(l) ?? Infinity) <= hasta) &&
+    pasaContacto(l)
   ).sort((a, b) => (datos.origen ? (km(a) ?? 1e9) - (km(b) ?? 1e9) : 0) || a.ciudad.localeCompare(b.ciudad) || a.nombre.localeCompare(b.nombre));
 }
 
@@ -479,10 +506,10 @@ function dibujar() {
     const tel = numeroWhatsApp(l.telefono);
     const maps = l.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
     const contacto = [l.telefono && l.telefono.replaceAll(' ', '\u00a0').replaceAll('-', '\u2011'), l.email, l.instagram && 'IG: ' + l.instagram, l.direccion].filter(Boolean).map(esc).join('<br>');
-    return `<tr>
+    return `<tr data-ficha="${esc(l.id)}" class="${l.id === elegido ? 'elegido' : ''}">
       <td class="idx">${String(i + 1).padStart(3, '0')}</td>
       <td><select data-id="${esc(l.id)}" class="cambiarEstado e-${l.estado.replaceAll(' ', '-')}">${ESTADOS.map((e) => `<option${e === l.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></td>
-      <td class="nombre">${esc(l.nombre) || '<i>(sin nombre)</i>'}${l.rating ? `<span class="rating">${esc(l.rating)}</span>` : ''}</td>
+      <td class="nombre">${esc(l.nombre) || '<i>(sin nombre)</i>'}${l.rating ? `<span class="rating">${esc(l.rating)}</span>` : ''}<br>${l.telefono ? '<span class="con">Tel</span>' : ''}${l.email ? '<span class="con">Mail</span>' : ''}</td>
       <td>${esc(l.rubro)}</td>
       <td>${esc(l.ciudad)}</td>
       <td class="km">${km(l) == null ? '' : km(l).toFixed(1).replace('.', ',')}</td>
@@ -496,6 +523,56 @@ function dibujar() {
       </td>
     </tr>`;
   }).join('');
+  if (elegido) mostrarFicha(elegido);
+}
+
+// ---- Ficha del local: todos los datos para contactarlo, al costado de la lista ----
+let elegido = null;
+function linkRed(valor, base) { return /^https?:/.test(valor) ? valor : base + valor.replace(/^@/, ''); }
+function mostrarFicha(id) {
+  const l = datos.leads[id];
+  if (!l) { cerrarFicha(); return; }
+  elegido = id;
+  const tel = numeroWhatsApp(l.telefono);
+  const maps = l.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.nombre + ' ' + l.ciudad)}`;
+  const asunto = `Sistema de gestión para ${l.nombre || 'su taller'}`;
+  const dato = (titulo, html) => (html ? `<div class="dato"><span>${titulo}</span><div>${html}</div></div>` : '');
+  const distancia = km(l);
+  $('ficha').innerHTML = `
+    <div class="ficha-cab"><div><h3>${esc(l.nombre) || '(sin nombre)'}</h3><div class="sub">${esc(l.rubro)} · ${esc(l.ciudad)}${distancia == null ? '' : ` · ${distancia.toFixed(1).replace('.', ',')} km`}</div></div><button class="sec" id="cerrarFicha" aria-label="Cerrar">✕</button></div>
+    <div class="ficha-cuerpo">
+      <h4>Datos de contacto</h4>
+      ${l.telefono || l.email || l.web || l.instagram || l.facebook ? '' : '<p class="sin-datos">El mapa no tiene teléfono ni mail de este local. Buscalo en Google Maps o pasá a dejarle una tarjeta.</p>'}
+      ${dato('Teléfono', l.telefono && `<a href="tel:${esc(l.telefono.replace(/[^\d+]/g, ''))}">${esc(l.telefono)}</a>`)}
+      ${dato('Mail', l.email && `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>`)}
+      ${dato('Web', l.web && `<a href="${esc(l.web)}" target="_blank" rel="noopener">${esc(l.web.replace(/^https?:\/\/(www\.)?/, ''))}</a>`)}
+      ${dato('Instagram', l.instagram && `<a href="${esc(linkRed(l.instagram, 'https://instagram.com/'))}" target="_blank" rel="noopener">${esc(l.instagram)}</a>`)}
+      ${dato('Facebook', l.facebook && `<a href="${esc(linkRed(l.facebook, 'https://facebook.com/'))}" target="_blank" rel="noopener">${esc(l.facebook)}</a>`)}
+      ${dato('Dirección', esc([l.direccion, l.ciudad].filter(Boolean).join(', ')))}
+      <div class="botones">
+        ${tel ? `<a href="https://wa.me/${tel}?text=${encodeURIComponent(mensaje(l))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+        ${l.email ? `<a href="mailto:${esc(l.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(mensaje(l))}">Mandar mail</a>` : ''}
+        ${l.telefono ? `<a class="sec" href="tel:${esc(l.telefono.replace(/[^\d+]/g, ''))}">Llamar</a>` : ''}
+        <a class="sec" href="${maps}" target="_blank" rel="noopener">Ver en Maps</a>
+      </div>
+      <h4>Seguimiento</h4>
+      <label for="fichaEstado">Estado</label>
+      <select id="fichaEstado">${ESTADOS.map((e) => `<option${e === l.estado ? ' selected' : ''}>${e}</option>`).join('')}</select>
+      <label for="fichaNota" style="margin-top:12px">Nota</label>
+      <textarea id="fichaNota" placeholder="Ej: lo atendió el dueño, llamar el lunes">${esc(l.nota)}</textarea>
+      ${l.fecha ? `<p class="nota">${esc(l.estado)} el ${esc(l.fecha)}</p>` : ''}
+      <h4>Mensaje</h4>
+      <p class="nota" style="margin-top:0">${esc(mensaje(l))}</p>
+    </div>`;
+  $('ficha').hidden = false;
+  document.body.classList.add('con-ficha');
+  document.querySelectorAll('#filas tr').forEach((tr) => tr.classList.toggle('elegido', tr.dataset.ficha === id));
+}
+function cerrarFicha() {
+  elegido = null;
+  $('ficha').hidden = true;
+  document.body.classList.remove('con-ficha');
+  document.querySelectorAll('#filas tr.elegido').forEach((tr) => tr.classList.remove('elegido'));
 }
 
 function exportar() {
@@ -524,7 +601,7 @@ $('calcularKm').addEventListener('click', calcularKm);
 $('origen').addEventListener('keydown', (e) => { if (e.key === 'Enter') calcularKm(); });
 $('origen').value = datos.origen?.texto || '';
 $('zona').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar(); });
-['filtroTexto', 'filtroEstado', 'filtroSinWeb', 'filtroKm'].forEach((id) => $(id).addEventListener('input', dibujar));
+['filtroTexto', 'filtroEstado', 'filtroSinWeb', 'filtroKm', 'filtroContacto'].forEach((id) => $(id).addEventListener('input', dibujar));
 $('exportar').addEventListener('click', exportar);
 $('borrar').addEventListener('click', () => { if (confirm('¿Borrar toda la lista?')) { datos.leads = {}; guardar(); dibujar(); } });
 $('filas').addEventListener('change', (e) => {
@@ -559,6 +636,19 @@ $('archivo').addEventListener('change', async (e) => {
   } catch { avisar('Ese archivo no es una copia del buscador.'); }
   e.target.value = '';
 });
+$('filas').addEventListener('click', (e) => {
+  // tocar la fila abre la ficha; los controles de la fila siguen haciendo lo suyo
+  if (e.target.closest('a, button, select, input')) return;
+  const tr = e.target.closest('tr[data-ficha]');
+  if (tr) mostrarFicha(tr.dataset.ficha);
+});
+$('ficha').addEventListener('click', (e) => { if (e.target.id === 'cerrarFicha') cerrarFicha(); });
+$('ficha').addEventListener('change', (e) => {
+  const l = datos.leads[elegido];
+  if (e.target.id === 'fichaEstado') { l.estado = e.target.value; l.fecha = new Date().toLocaleDateString('es-AR'); guardar(); dibujar(); }
+  if (e.target.id === 'fichaNota') { l.nota = e.target.value; guardar(); dibujar(); }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarFicha(); });
 $('filas').addEventListener('click', async (e) => {
   if (!e.target.classList.contains('copiar')) return;
   await navigator.clipboard.writeText(mensaje(datos.leads[e.target.dataset.id]));
