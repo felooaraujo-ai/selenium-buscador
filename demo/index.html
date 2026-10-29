@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Selenium Systems · Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet">
+<style>
+  /* Misma guía visual que el buscador: SAP Fiori, tema Horizon */
+  :root {
+    --fondo:#f5f6f7; --tarjeta:#fff; --borde:#e5e5e5; --borde-campo:#bcc3ca;
+    --texto:#0b1f3a; --texto2:#556b82; --marca:#0070f2; --marca-hover:#0064d9; --marca-suave:#ebf8ff;
+    --positivo:#256f3a; --positivo-bg:#f5fae5; --critico:#e76500; --critico-bg:#fff8d6;
+    --negativo:#aa0808; --negativo-bg:#ffeaf4; --neutro-bg:#eff1f2; --medianoche:#0b1f3a;
+    --sombra:0 0 0.125rem rgba(34,53,72,.15), 0 0.125rem 0.5rem rgba(34,53,72,.08);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fondo); color:var(--texto); font:14px/1.45 "72", "Segoe UI", Arial, Helvetica, sans-serif; }
+  a { color:var(--marca); text-decoration:none; } a:hover { text-decoration:underline; }
+
+  header { background:var(--tarjeta); box-shadow:0 1px 0 var(--borde); position:sticky; top:0; z-index:5; }
+  .marca { height:52px; padding:0 16px; display:flex; align-items:center; gap:12px; }
+  header h1 { margin:0; display:flex; align-items:baseline; gap:8px; font-weight:400; }
+  header h1 .wm { font:17px/1 Michroma, "Segoe UI", Arial, sans-serif; letter-spacing:.06em; }
+  header h1 .sub { font-size:10px; letter-spacing:.4em; color:#2f5d8a; }
+  .taller { margin-left:auto; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--texto2); }
+  .demo { white-space:nowrap; font-size:11px; font-weight:700; letter-spacing:.04em; color:#a04600; background:var(--critico-bg); border-radius:10px; padding:2px 8px; }
+
+  .app { display:grid; grid-template-columns:220px minmax(0,1fr); min-height:calc(100vh - 52px); }
+  nav { background:var(--tarjeta); border-right:1px solid var(--borde); padding:12px 8px; }
+  nav a { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; color:var(--texto); font-weight:500; }
+  nav a:hover { background:var(--marca-suave); text-decoration:none; }
+  nav a.activo { background:var(--marca-suave); color:var(--marca); font-weight:700; box-shadow:inset 3px 0 0 var(--marca); }
+  nav a b { margin-left:auto; font-size:11px; background:var(--negativo-bg); color:var(--negativo); border-radius:10px; padding:0 7px; }
+  nav .pie a { display:inline; padding:0; font-weight:400; color:var(--marca); }
+  nav .pie { margin:16px 12px 0; padding-top:12px; border-top:1px solid var(--borde); font-size:12px; color:var(--texto2); }
+
+  main { padding:24px; max-width:1200px; width:100%; }
+  .titulo { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:16px; }
+  .titulo h2 { margin:0; font-size:22px; letter-spacing:-.01em; }
+  .titulo p { margin:2px 0 0; color:var(--texto2); flex-basis:100%; }
+  .titulo .acc { margin-left:auto; display:flex; gap:8px; }
+  .card { background:var(--tarjeta); border-radius:12px; box-shadow:var(--sombra); padding:20px; margin-bottom:16px; }
+  .card h3 { margin:0 0 12px; font-size:15px; }
+  .grilla { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; }
+  .grilla .card { margin:0; }
+
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { background:#fff; border:1px solid var(--borde); border-radius:12px; padding:14px 16px; color:var(--texto); }
+  a.kpi:hover { border-color:var(--marca); background:#f5fafe; text-decoration:none; }
+  .kpi span { font-size:12px; color:var(--texto2); }
+  .kpi b { display:block; font-size:26px; line-height:1.15; margin-top:4px; }
+  .kpi small { font-size:12px; color:var(--texto2); }
+  .kpi.alerta b { color:var(--negativo); } .kpi.aviso b { color:var(--critico); }
+
+  button, .btn { height:36px; padding:0 16px; border:1px solid var(--marca); border-radius:8px; background:var(--marca); color:#fff; font:inherit; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; }
+  button:hover, .btn:hover { background:var(--marca-hover); text-decoration:none; }
+  button.sec { background:#fff; color:var(--marca); border-color:var(--borde-campo); font-weight:400; }
+  button.sec:hover { background:var(--marca-suave); border-color:var(--marca); }
+  button.chico { height:28px; padding:0 10px; font-size:13px; }
+  label { display:block; font-size:13px; color:var(--texto2); margin-bottom:4px; }
+  input, select, textarea { width:100%; height:36px; padding:0 10px; border:1px solid var(--borde-campo); border-bottom-color:#556b81; border-radius:4px; font:inherit; color:var(--texto); background:#fff; }
+  textarea { height:auto; min-height:70px; padding:8px 10px; }
+  input:focus, select:focus, textarea:focus { outline:2px solid var(--marca); outline-offset:1px; }
+  .form { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+
+  .tabla { overflow-x:auto; border:1px solid var(--borde); border-radius:8px; background:#fff; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--borde); vertical-align:middle; }
+  th { font-size:13px; font-weight:600; color:var(--texto2); background:#fafbfc; white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:0; }
+  tbody tr.clic { cursor:pointer; } tbody tr.clic:hover { background:#f5fafe; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .sub2 { display:block; font-size:12px; color:var(--texto2); }
+
+  .chip { display:inline-block; font-size:12px; font-weight:600; border-radius:10px; padding:2px 8px; background:var(--neutro-bg); color:var(--texto2); white-space:nowrap; }
+  .chip.azul { background:var(--marca-suave); color:#0040b0; } .chip.verde { background:var(--positivo-bg); color:var(--positivo); }
+  .chip.naranja { background:var(--critico-bg); color:#a04600; } .chip.rojo { background:var(--negativo-bg); color:var(--negativo); }
+
+  .barra { height:6px; border-radius:3px; background:var(--neutro-bg); overflow:hidden; min-width:80px; }
+  .barra i { display:block; height:100%; background:var(--marca); }
+
+  /* Producción: tablero por etapas */
+  .tablero { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(200px, 1fr); gap:12px; overflow-x:auto; padding-bottom:8px; }
+  .col { background:#eef1f4; border-radius:12px; padding:10px; min-height:200px; }
+  .col h4 { margin:2px 4px 10px; font-size:13px; display:flex; justify-content:space-between; color:var(--texto2); }
+  .tarea { background:#fff; border-radius:8px; box-shadow:var(--sombra); padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .tarea b { display:block; font-size:14px; }
+  .tarea button { white-space:nowrap; }
+  .tarea .pie { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; }
+
+  /* Gráfico de barras simple */
+  .grafico { display:flex; align-items:flex-end; gap:10px; height:160px; padding-top:10px; }
+  .grafico div { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; font-size:11px; color:var(--texto2); }
+  .grafico i { width:100%; max-width:44px; background:var(--marca); border-radius:4px 4px 0 0; margin:4px 0; }
+  .grafico div:last-child i { background:var(--medianoche); }
+
+  .lista { list-style:none; margin:0; padding:0; }
+  .lista li { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--borde); }
+  .lista li:last-child { border-bottom:0; }
+  .dia { width:48px; text-align:center; border-radius:8px; background:var(--marca-suave); color:#0040b0; padding:4px 0; flex:none; }
+  .dia b { display:block; font-size:18px; line-height:1.1; } .dia small { font-size:11px; text-transform:uppercase; }
+
+  dialog { border:0; border-radius:12px; box-shadow:0 10px 40px rgba(11,31,58,.3); padding:0; width:min(720px, calc(100vw - 32px)); }
+  dialog::backdrop { background:rgba(11,31,58,.35); }
+  .dlg-cab { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--borde); }
+  .dlg-cab h3 { margin:0; font-size:17px; }
+  .dlg-cab button { margin-left:auto; }
+  .dlg-cuerpo { padding:20px; max-height:70vh; overflow:auto; }
+  .dlg-pie { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid var(--borde); background:#fafbfc; }
+
+  /* Seguimiento para el cliente final */
+  .pasos { display:flex; gap:4px; margin:16px 0; }
+  .pasos div { flex:1; text-align:center; font-size:11px; color:var(--texto2); }
+  .pasos div::before { content:''; display:block; height:6px; border-radius:3px; background:var(--neutro-bg); margin-bottom:6px; }
+  .pasos div.ok::before { background:var(--marca); } .pasos div.ok { color:var(--texto); font-weight:600; }
+
+  /* Presupuesto para imprimir o guardar en PDF */
+  .hoja { font-size:13px; }
+  .hoja .cab { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid var(--medianoche); padding-bottom:12px; margin-bottom:16px; }
+  .hoja .total { text-align:right; font-size:18px; font-weight:700; margin-top:12px; }
+  @media print {
+    body * { visibility:hidden; }
+    #imprimible, #imprimible * { visibility:visible; }
+    #imprimible { position:fixed; inset:0; padding:24px; background:#fff; }
+    dialog { box-shadow:none; }
+  }
+
+  @media (max-width:800px) {
+    .app { grid-template-columns:minmax(0,1fr); }
+    nav { display:flex; overflow-x:auto; gap:4px; padding:8px; border-right:0; border-bottom:1px solid var(--borde); position:sticky; top:52px; z-index:4; }
+    nav a { white-space:nowrap; padding:7px 10px; } nav a.activo { box-shadow:inset 0 -3px 0 var(--marca); }
+    nav .pie { display:none; }
+    main { padding:16px; }
+    .taller span.nombre-taller, .demo .largo { display:none; }
+    .kpi b { font-size:22px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="marca">
+    <svg viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><circle cx="46" cy="54" r="40" fill="#0070F2"/><circle cx="56" cy="44" r="36" fill="#0B1F3A"/></svg>
+    <h1><span class="wm">SELENIUM</span> <span class="sub">SYSTEMS</span></h1>
+    <div class="taller"><span class="nombre-taller">Taller Demo · Muebles a medida</span><span class="demo">DEMO<span class="largo"> · DATOS FICTICIOS</span></span></div>
+  </div>
+</header>
+<div class="app">
+  <nav id="menu"></nav>
+  <main id="vista"></main>
+</div>
+<dialog id="dlg"></dialog>
+
+<script>
+// ---------- Datos de ejemplo ----------
+// Todo es inventado. Las fechas se arman a partir de hoy, así la demo siempre parece al día.
+const ETAPAS = ['Medición', 'Diseño', 'Corte', 'Armado', 'Terminación', 'Instalación', 'Entregado'];
+const CLAVE = 'selenium-demo-v1';
+const HOY = new Date(); HOY.setHours(0, 0, 0, 0);
+const dia = (n) => { const d = new Date(HOY); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+
+function datosDeEjemplo() {
+  const clientes = [
+    ['Laura Méndez', '11 5555-0101', 'Caseros'], ['Estudio Arq. Ferraro', '11 5555-0102', 'Villa Devoto'],
+    ['Martín Sosa', '11 5555-0103', 'Ciudad Jardín'], ['Café La Esquina (ficticio)', '11 5555-0104', 'Santos Lugares'],
+    ['Paula Giménez', '11 5555-0105', 'Villa Bosch'], ['Rodrigo Paz', '11 5555-0106', 'El Palomar'],
+    ['Inmobiliaria Norte (ficticia)', '11 5555-0107', 'San Martín'], ['Carla Benítez', '11 5555-0108', 'Haedo'],
+  ].map(([nombre, tel, localidad], i) => ({ id: i + 1, nombre, tel, localidad }));
+  const p = (id, cliente, mueble, material, total, pagado, etapa, alta, entrega) => ({ id, cliente, mueble, material, total, pagado, etapa, alta: dia(alta), entrega: dia(entrega), nota: '' });
+  const pedidos = [
+    p(1041, 1, 'Bajo mesada y alacena 2,40 m', 'Melamina blanca 18 mm', 1850000, 925000, 3, -20, 6),
+    p(1042, 2, 'Biblioteca de estudio a medida', 'MDF laqueado', 2400000, 1200000, 1, -9, 21),
+    p(1043, 3, 'Placard 3 puertas corredizas', 'Melamina roble', 1320000, 660000, 4, -25, 2),
+    p(1044, 4, 'Barra y estantes para café', 'Paraíso macizo', 3150000, 1575000, 2, -14, 12),
+    p(1045, 5, 'Vanitory con cajones', 'Melamina gris grafito', 540000, 540000, 5, -30, 1),
+    p(1046, 6, 'Mesa de comedor 8 personas', 'Eucalipto', 980000, 490000, 3, -18, -1),
+    p(1047, 7, 'Escritorios para oficina (x4)', 'Melamina + caño', 2760000, 1380000, 0, -3, 28),
+    p(1048, 8, 'Rack de TV flotante', 'MDF laqueado', 420000, 420000, 6, -40, -6),
+    p(1049, 1, 'Mueble de lavadero', 'Melamina blanca', 610000, 300000, 2, -6, 15),
+    p(1050, 2, 'Placard en suite', 'Melamina nogal', 1980000, 0, 0, -1, 35),
+  ];
+  const presupuestos = [
+    { id: 301, cliente: 3, fecha: dia(-2), estado: 'Enviado', items: [['Cocina completa en L', 1, 2950000], ['Herrajes con freno', 14, 9500], ['Instalación', 1, 180000]] },
+    { id: 302, cliente: 5, fecha: dia(-5), estado: 'Aceptado', items: [['Placard de pasillo', 1, 890000], ['Instalación', 1, 90000]] },
+    { id: 303, cliente: 6, fecha: dia(-11), estado: 'Rechazado', items: [['Deck de madera 12 m²', 12, 85000]] },
+    { id: 304, cliente: 8, fecha: dia(-1), estado: 'Enviado', items: [['Mesa ratona', 1, 260000], ['Aparador', 1, 540000]] },
+  ];
+  const insumos = [
+    ['Placa melamina blanca 18 mm', 'placas', 14, 10], ['Placa melamina roble 18 mm', 'placas', 4, 6],
+    ['Placa MDF 15 mm', 'placas', 9, 5], ['Canto PVC blanco 22 mm', 'rollos', 2, 3],
+    ['Bisagras cazoleta 35 mm', 'unidades', 180, 100], ['Correderas telescópicas 45 cm', 'pares', 12, 20],
+    ['Tornillos 4 x 50', 'cajas', 7, 4], ['Laca poliuretánica', 'litros', 3, 8],
+  ].map(([nombre, unidad, stock, minimo], i) => ({ id: i + 1, nombre, unidad, stock, minimo }));
+  const ventas = [6.1, 7.4, 5.8, 8.9, 9.6, 11.2].map((m) => m * 1e6); // facturación de los últimos 6 meses
+  return { clientes, pedidos, presupuestos, insumos, ventas };
+}
+
+let db = cargar();
+function cargar() { try { return JSON.parse(localStorage.getItem(CLAVE)) || datosDeEjemplo(); } catch { return datosDeEjemplo(); } }
+function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(db)); } catch { /* sigue en memoria */ } }
+
+// ---------- Utilidades ----------
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const plata = (n) => '$ ' + Math.round(n).toLocaleString('es-AR');
+const fecha = (iso) => new Date(iso + 'T00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+const diasHasta = (iso) => Math.round((new Date(iso + 'T00:00') - HOY) / 864e5);
+const cliente = (id) => db.clientes.find((c) => c.id === id) || { nombre: '—' };
+const activos = () => db.pedidos.filter((p) => p.etapa < ETAPAS.length - 1);
+const totalPres = (pr) => pr.items.reduce((s, [, c, pu]) => s + c * pu, 0);
+
+function chipEntrega(p) {
+  if (p.etapa === ETAPAS.length - 1) return '<span class="chip verde">Entregado</span>';
+  const d = diasHasta(p.entrega);
+  if (d < 0) return `<span class="chip rojo">Atrasado ${-d} d</span>`;
+  if (d <= 3) return `<span class="chip naranja">${d === 0 ? 'Hoy' : 'En ' + d + ' d'}</span>`;
+  return `<span class="chip">${fecha(p.entrega)}</span>`;
+}
+const chipEtapa = (p) => `<span class="chip ${p.etapa === ETAPAS.length - 1 ? 'verde' : 'azul'}">${ETAPAS[p.etapa]}</span>`;
+const avance = (p) => `<div class="barra"><i style="width:${Math.round(p.etapa / (ETAPAS.length - 1) * 100)}%"></i></div>`;
+
+// ---------- Menú ----------
+const VISTAS = { inicio: 'Inicio', pedidos: 'Pedidos', produccion: 'Producción', clientes: 'Clientes', presupuestos: 'Presupuestos', insumos: 'Insumos', agenda: 'Agenda' };
+function menu(actual) {
+  const atrasados = activos().filter((p) => diasHasta(p.entrega) < 0).length;
+  const bajos = db.insumos.filter((i) => i.stock < i.minimo).length;
+  const marca = { pedidos: atrasados, insumos: bajos };
+  $('#menu').innerHTML = Object.entries(VISTAS).map(([id, t]) => `<a href="#${id}" class="${id === actual ? 'activo' : ''}">${t}${marca[id] ? `<b>${marca[id]}</b>` : ''}</a>`).join('')
+    + '<div class="pie">Esto es una demo con datos inventados. Podés tocar todo.<br><a href="#" id="reiniciar">Volver a los datos iniciales</a></div>';
+}
+
+// ---------- Vistas ----------
+function titulo(t, sub, acciones = '') { return `<div class="titulo"><h2>${t}</h2>${acciones && `<div class="acc">${acciones}</div>`}<p>${sub}</p></div>`; }
+
+function vistaInicio() {
+  const act = activos();
+  const atrasados = act.filter((p) => diasHasta(p.entrega) < 0);
+  const semana = act.filter((p) => diasHasta(p.entrega) >= 0 && diasHasta(p.entrega) <= 7);
+  const aCobrar = db.pedidos.reduce((s, p) => s + p.total - p.pagado, 0);
+  const bajos = db.insumos.filter((i) => i.stock < i.minimo);
+  const max = Math.max(...db.ventas);
+  const meses = db.ventas.map((_, i) => { const d = new Date(HOY); d.setMonth(d.getMonth() - (db.ventas.length - 1 - i)); return d.toLocaleDateString('es-AR', { month: 'short' }); });
+  const proximos = [...act].sort((a, b) => a.entrega.localeCompare(b.entrega)).slice(0, 6);
+  return titulo('Buen día', 'Así viene el taller hoy, ' + HOY.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) + '.')
+    + `<div class="kpis">
+      <a class="kpi" href="#pedidos"><span>Pedidos en curso</span><b>${act.length}</b><small>${plata(act.reduce((s, p) => s + p.total, 0))} en total</small></a>
+      <a class="kpi aviso" href="#agenda"><span>Entregas esta semana</span><b>${semana.length}</b><small>próximos 7 días</small></a>
+      <a class="kpi ${atrasados.length ? 'alerta' : ''}" href="#pedidos"><span>Atrasados</span><b>${atrasados.length}</b><small>pasaron la fecha de entrega</small></a>
+      <a class="kpi" href="#clientes"><span>Saldo a cobrar</span><b>${plata(aCobrar)}</b><small>de todos los pedidos</small></a>
+      <a class="kpi ${bajos.length ? 'alerta' : ''}" href="#insumos"><span>Insumos bajo mínimo</span><b>${bajos.length}</b><small>hay que reponer</small></a>
+    </div>
+    <div class="grilla">
+      <div class="card"><h3>Próximas entregas</h3><ul class="lista">${proximos.map((p) => `<li><div class="dia"><b>${new Date(p.entrega + 'T00:00').getDate()}</b><small>${new Date(p.entrega + 'T00:00').toLocaleDateString('es-AR', { month: 'short' })}</small></div><div style="flex:1;min-width:0"><a href="#" data-pedido="${p.id}">${esc(p.mueble)}</a><span class="sub2">${esc(cliente(p.cliente).nombre)} · ${ETAPAS[p.etapa]}</span></div>${chipEntrega(p)}</li>`).join('')}</ul></div>
+      <div class="card"><h3>Facturación de los últimos 6 meses</h3><div class="grafico">${db.ventas.map((v, i) => `<div>${(v / 1e6).toFixed(1).replace('.', ',')} M<i style="height:${Math.round(v / max * 100)}%"></i>${meses[i]}</div>`).join('')}</div></div>
+    </div>`;
+}
+
+function vistaPedidos() {
+  let filtro = 'activos'; try { filtro = sessionStorage.getItem('filtroPedidos') || filtro; } catch {}
+  const lista = db.pedidos.filter((p) => filtro === 'todos' || (filtro === 'activos' ? p.etapa < ETAPAS.length - 1 : diasHasta(p.entrega) < 0 && p.etapa < ETAPAS.length - 1))
+    .sort((a, b) => a.entrega.localeCompare(b.entrega));
+  const op = (v, t) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`;
+  return titulo('Pedidos', 'Cada pedido con su etapa, su fecha de entrega y cuánto falta cobrar.', '<button id="nuevoPedido">+ Nuevo pedido</button>')
+    + `<div class="card"><div style="max-width:240px;margin-bottom:12px"><label>Mostrar</label><select id="filtroPedidos">${op('activos', 'En curso')}${op('atrasados', 'Atrasados')}${op('todos', 'Todos')}</select></div>
+    <div class="tabla"><table><thead><tr><th>N°</th><th>Mueble</th><th>Cliente</th><th>Etapa</th><th>Avance</th><th>Entrega</th><th class="num">Total</th><th class="num">Saldo</th></tr></thead><tbody>
+    ${lista.map((p) => `<tr class="clic" data-pedido="${p.id}"><td>${p.id}</td><td><b>${esc(p.mueble)}</b><span class="sub2">${esc(p.material)}</span></td><td>${esc(cliente(p.cliente).nombre)}</td><td>${chipEtapa(p)}</td><td>${avance(p)}</td><td>${chipEntrega(p)}</td><td class="num">${plata(p.total)}</td><td class="num">${p.total - p.pagado ? plata(p.total - p.pagado) : '<span class="chip verde">Pagado</span>'}</td></tr>`).join('') || '<tr><td colspan="8">No hay pedidos para mostrar.</td></tr>'}
+    </tbody></table></div></div>`;
+}
+
+function vistaProduccion() {
+  return titulo('Producción', 'Tocá "Avanzar" cuando un mueble pasa a la etapa siguiente. El cliente lo ve en su link de seguimiento.')
+    + `<div class="tablero">${ETAPAS.slice(0, -1).map((e, i) => {
+      const ps = db.pedidos.filter((p) => p.etapa === i);
+      return `<div class="col"><h4>${e}<span>${ps.length}</span></h4>${ps.map((p) => `<div class="tarea"><b>${esc(p.mueble)}</b>${esc(cliente(p.cliente).nombre)} · N° ${p.id}<div class="pie">${chipEntrega(p)}<button class="chico sec" data-avanzar="${p.id}">Avanzar →</button></div></div>`).join('')}</div>`;
+    }).join('')}</div>`;
+}
+
+function vistaClientes() {
+  return titulo('Clientes', 'Historial y saldo de cada cliente. WhatsApp a un toque.', '<button id="nuevoCliente">+ Nuevo cliente</button>')
+    + `<div class="card"><div class="tabla"><table><thead><tr><th>Cliente</th><th>Localidad</th><th>Teléfono</th><th class="num">Pedidos</th><th class="num">Saldo</th></tr></thead><tbody>
+    ${db.clientes.map((c) => { const ps = db.pedidos.filter((p) => p.cliente === c.id); const saldo = ps.reduce((s, p) => s + p.total - p.pagado, 0);
+      return `<tr><td><b>${esc(c.nombre)}</b></td><td>${esc(c.localidad)}</td><td><a href="https://wa.me/549${c.tel.replace(/\D/g, '')}" target="_blank" rel="noopener">${esc(c.tel)}</a></td><td class="num">${ps.length}</td><td class="num">${saldo ? plata(saldo) : '<span class="chip verde">Al día</span>'}</td></tr>`; }).join('')}
+    </tbody></table></div><p class="sub2" style="margin-top:10px">Los teléfonos son inventados.</p></div>`;
+}
+
+function vistaPresupuestos() {
+  const color = { Enviado: 'azul', Aceptado: 'verde', Rechazado: 'rojo' };
+  return titulo('Presupuestos', 'Armás el presupuesto, lo mandás en PDF y si lo aceptan se convierte en pedido.', '<button id="nuevoPres">+ Nuevo presupuesto</button>')
+    + `<div class="card"><div class="tabla"><table><thead><tr><th>N°</th><th>Cliente</th><th>Fecha</th><th>Detalle</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead><tbody>
+    ${[...db.presupuestos].reverse().map((pr) => `<tr><td>${pr.id}</td><td>${esc(cliente(pr.cliente).nombre)}</td><td>${fecha(pr.fecha)}</td><td>${esc(pr.items[0][0])}${pr.items.length > 1 ? ` <span class="sub2">y ${pr.items.length - 1} ítem(s) más</span>` : ''}</td><td><span class="chip ${color[pr.estado]}">${pr.estado}</span></td><td class="num">${plata(totalPres(pr))}</td>
+      <td style="white-space:nowrap"><button class="chico sec" data-pdf="${pr.id}">Ver PDF</button> ${pr.estado === 'Enviado' ? `<button class="chico" data-aceptar="${pr.id}">Aceptado → pedido</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+function vistaInsumos() {
+  return titulo('Insumos', 'Stock del taller. Lo que está debajo del mínimo aparece en rojo para reponer.')
+    + `<div class="card"><div class="tabla"><table><thead><tr><th>Insumo</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Estado</th><th>Ajustar</th></tr></thead><tbody>
+    ${db.insumos.map((i) => `<tr><td><b>${esc(i.nombre)}</b></td><td class="num">${i.stock} ${esc(i.unidad)}</td><td class="num">${i.minimo}</td><td>${i.stock < i.minimo ? '<span class="chip rojo">Reponer</span>' : i.stock < i.minimo * 1.3 ? '<span class="chip naranja">Justo</span>' : '<span class="chip verde">Bien</span>'}</td>
+      <td style="white-space:nowrap"><button class="chico sec" data-stock="${i.id}" data-delta="-1">−1</button> <button class="chico sec" data-stock="${i.id}" data-delta="1">+1</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+function vistaAgenda() {
+  const eventos = activos().map((p) => ({ fecha: p.entrega, texto: (p.etapa >= 5 ? 'Instalación: ' : 'Entrega: ') + p.mueble, p }))
+    .concat(db.pedidos.filter((p) => p.etapa === 0).map((p) => ({ fecha: dia(2 + (p.id % 3)), texto: 'Medición: ' + p.mueble, p })))
+    .filter((e) => diasHasta(e.fecha) >= -7 && diasHasta(e.fecha) <= 35).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  return titulo('Agenda', 'Mediciones, entregas e instalaciones de las próximas semanas.')
+    + `<div class="card"><ul class="lista">${eventos.map((e) => { const d = new Date(e.fecha + 'T00:00');
+      return `<li><div class="dia" ${diasHasta(e.fecha) < 0 ? 'style="background:var(--negativo-bg);color:var(--negativo)"' : ''}><b>${d.getDate()}</b><small>${d.toLocaleDateString('es-AR', { weekday: 'short' })}</small></div><div style="flex:1;min-width:0"><a href="#" data-pedido="${e.p.id}">${esc(e.texto)}</a><span class="sub2">${esc(cliente(e.p.cliente).nombre)} · ${esc(cliente(e.p.cliente).localidad || '')}</span></div>${chipEntrega(e.p)}</li>`; }).join('')}</ul></div>`;
+}
+
+const RENDER = { inicio: vistaInicio, pedidos: vistaPedidos, produccion: vistaProduccion, clientes: vistaClientes, presupuestos: vistaPresupuestos, insumos: vistaInsumos, agenda: vistaAgenda };
+function dibujar() {
+  const v = location.hash.slice(1);
+  const actual = RENDER[v] ? v : 'inicio';
+  menu(actual);
+  $('#vista').innerHTML = RENDER[actual]();
+}
+
+// ---------- Diálogos ----------
+function abrir(tituloDlg, cuerpo, pie = '') {
+  $('#dlg').innerHTML = `<div class="dlg-cab"><h3>${tituloDlg}</h3><button class="sec chico" data-cerrar>✕</button></div><div class="dlg-cuerpo">${cuerpo}</div>${pie && `<div class="dlg-pie">${pie}</div>`}`;
+  $('#dlg').showModal();
+}
+const cerrar = () => $('#dlg').close();
+
+function detallePedido(id) {
+  const p = db.pedidos.find((x) => x.id === id), c = cliente(p.cliente);
+  abrir(`Pedido N° ${p.id}`, `
+    <div class="form">
+      <div><label>Mueble</label><b>${esc(p.mueble)}</b><span class="sub2">${esc(p.material)}</span></div>
+      <div><label>Cliente</label><b>${esc(c.nombre)}</b><span class="sub2">${esc(c.tel)} · ${esc(c.localidad)}</span></div>
+      <div><label>Entrega</label>${chipEntrega(p)} <span class="sub2">${new Date(p.entrega + 'T00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
+      <div><label>Plata</label><b>${plata(p.pagado)}</b> de ${plata(p.total)}<span class="sub2">Falta cobrar ${plata(p.total - p.pagado)}</span></div>
+    </div>
+    <div class="pasos">${ETAPAS.map((e, i) => `<div class="${i <= p.etapa ? 'ok' : ''}">${e}</div>`).join('')}</div>
+    <div class="form"><div><label>Etapa</label><select id="etapa">${ETAPAS.map((e, i) => `<option value="${i}"${i === p.etapa ? ' selected' : ''}>${e}</option>`).join('')}</select></div>
+    <div><label>Registrar un pago</label><input id="pago" type="number" min="0" step="1000" placeholder="Ej: 200000"></div></div>`,
+  `<button class="sec" data-seguimiento="${p.id}">Ver lo que ve el cliente</button><button data-guardar-pedido="${p.id}">Guardar</button>`);
+}
+
+function seguimiento(id) {
+  // Así se vería la página que se le manda al cliente por WhatsApp
+  const p = db.pedidos.find((x) => x.id === id);
+  abrir('Seguimiento para el cliente', `
+    <p class="sub2">Esta es la página que recibe el cliente por WhatsApp. No ve precios de costo ni datos de otros clientes.</p>
+    <div class="card" style="margin:12px 0 0;border:1px solid var(--borde);box-shadow:none">
+      <div style="display:flex;align-items:center;gap:10px"><svg viewBox="0 0 100 100" width="24" height="24"><circle cx="46" cy="54" r="40" fill="#0070F2"/><circle cx="56" cy="44" r="36" fill="#0B1F3A"/></svg><b>Taller Demo</b></div>
+      <h3 style="margin:16px 0 4px">Hola ${esc(cliente(p.cliente).nombre.split(' ')[0])}, tu ${esc(p.mueble.toLowerCase())} está en <span style="color:var(--marca)">${ETAPAS[p.etapa].toLowerCase()}</span>.</h3>
+      <div class="pasos">${ETAPAS.map((e, i) => `<div class="${i <= p.etapa ? 'ok' : ''}">${e}</div>`).join('')}</div>
+      <p>Entrega estimada: <b>${diasHasta(p.entrega) < 0 ? 'te la confirmamos en estos días' : new Date(p.entrega + 'T00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</b></p>
+      <p>Saldo pendiente: <b>${plata(p.total - p.pagado)}</b></p>
+    </div>`);
+}
+
+function nuevoPedido() {
+  abrir('Nuevo pedido', `<div class="form">
+    <div><label>Cliente</label><select id="np-cliente">${db.clientes.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select></div>
+    <div><label>Mueble</label><input id="np-mueble" placeholder="Ej: Placard 2 puertas"></div>
+    <div><label>Material</label><input id="np-material" placeholder="Ej: Melamina blanca"></div>
+    <div><label>Fecha de entrega</label><input id="np-entrega" type="date" value="${dia(21)}"></div>
+    <div><label>Total</label><input id="np-total" type="number" min="0" step="1000" placeholder="Ej: 900000"></div>
+    <div><label>Seña</label><input id="np-sena" type="number" min="0" step="1000" placeholder="Ej: 450000"></div></div>`,
+  '<button class="sec" data-cerrar>Cancelar</button><button id="np-guardar">Crear pedido</button>');
+}
+
+function nuevoCliente() {
+  abrir('Nuevo cliente', `<div class="form"><div><label>Nombre</label><input id="nc-nombre"></div><div><label>Teléfono</label><input id="nc-tel" placeholder="11 5555-0000"></div><div><label>Localidad</label><input id="nc-loc"></div></div>`,
+    '<button class="sec" data-cerrar>Cancelar</button><button id="nc-guardar">Guardar</button>');
+}
+
+function nuevoPresupuesto() {
+  abrir('Nuevo presupuesto', `<div class="form"><div><label>Cliente</label><select id="pr-cliente">${db.clientes.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select></div></div>
+    <div id="pr-items" style="margin-top:12px"></div><button class="sec chico" id="pr-mas" style="margin-top:8px">+ Agregar ítem</button>
+    <p style="text-align:right;font-size:16px;margin:12px 0 0">Total: <b id="pr-total">$ 0</b></p>`,
+  '<button class="sec" data-cerrar>Cancelar</button><button id="pr-guardar">Guardar presupuesto</button>');
+  agregarItem(); agregarItem();
+}
+function agregarItem() {
+  $('#pr-items').insertAdjacentHTML('beforeend', `<div class="form pr-item" style="grid-template-columns:3fr 1fr 2fr;margin-bottom:8px"><input placeholder="Descripción" class="pr-d"><input type="number" value="1" min="1" class="pr-c"><input type="number" min="0" step="1000" placeholder="Precio unitario" class="pr-p"></div>`);
+}
+const itemsDelForm = () => [...document.querySelectorAll('.pr-item')].map((f) => [f.querySelector('.pr-d').value.trim(), Number(f.querySelector('.pr-c').value) || 0, Number(f.querySelector('.pr-p').value) || 0]).filter(([d, , p]) => d && p);
+
+function verPDF(id) {
+  const pr = db.presupuestos.find((x) => x.id === id), c = cliente(pr.cliente);
+  abrir(`Presupuesto N° ${pr.id}`, `<div class="hoja" id="imprimible">
+    <div class="cab"><div><div style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 100 100" width="26" height="26"><circle cx="46" cy="54" r="40" fill="#0070F2"/><circle cx="56" cy="44" r="36" fill="#0B1F3A"/></svg><b style="font-size:16px">Taller Demo</b></div><span class="sub2">Muebles a medida · datos ficticios</span></div>
+    <div style="text-align:right"><b>PRESUPUESTO N° ${pr.id}</b><span class="sub2">${new Date(pr.fecha + 'T00:00').toLocaleDateString('es-AR')}</span><span class="sub2">Válido por 15 días</span></div></div>
+    <p><b>Cliente:</b> ${esc(c.nombre)} · ${esc(c.localidad)}</p>
+    <div class="tabla"><table><thead><tr><th>Descripción</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Subtotal</th></tr></thead><tbody>
+    ${pr.items.map(([d, cant, pu]) => `<tr><td>${esc(d)}</td><td class="num">${cant}</td><td class="num">${plata(pu)}</td><td class="num">${plata(cant * pu)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="total">Total ${plata(totalPres(pr))}</div>
+    <p class="sub2">Forma de pago: 50% de seña al confirmar y 50% contra entrega. Incluye flete dentro de 15 km.</p></div>`,
+  '<button class="sec" data-cerrar>Cerrar</button><button id="imprimir">Imprimir o guardar PDF</button>');
+}
+
+// ---------- Eventos ----------
+window.addEventListener('hashchange', dibujar);
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-pedido],[data-avanzar],[data-pdf],[data-aceptar],[data-stock],[data-cerrar],[data-seguimiento],[data-guardar-pedido],button,a#reiniciar');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.pedido) { e.preventDefault(); detallePedido(Number(d.pedido)); }
+  else if (d.avanzar) { const p = db.pedidos.find((x) => x.id === Number(d.avanzar)); p.etapa++; guardar(); dibujar(); }
+  else if (d.pdf) verPDF(Number(d.pdf));
+  else if (d.aceptar) {
+    const pr = db.presupuestos.find((x) => x.id === Number(d.aceptar)); pr.estado = 'Aceptado';
+    const id = Math.max(...db.pedidos.map((p) => p.id)) + 1;
+    db.pedidos.push({ id, cliente: pr.cliente, mueble: pr.items[0][0], material: 'A definir', total: totalPres(pr), pagado: 0, etapa: 0, alta: dia(0), entrega: dia(30), nota: '' });
+    guardar(); location.hash = 'pedidos'; dibujar(); detallePedido(id);
+  }
+  else if (d.stock) { const i = db.insumos.find((x) => x.id === Number(d.stock)); i.stock = Math.max(0, i.stock + Number(d.delta)); guardar(); dibujar(); }
+  else if ('cerrar' in d) cerrar();
+  else if (d.seguimiento) seguimiento(Number(d.seguimiento));
+  else if (d.guardarPedido) {
+    const p = db.pedidos.find((x) => x.id === Number(d.guardarPedido));
+    p.etapa = Number($('#etapa').value); p.pagado = Math.min(p.total, p.pagado + (Number($('#pago').value) || 0));
+    guardar(); cerrar(); dibujar();
+  }
+  else if (t.id === 'reiniciar') { e.preventDefault(); if (confirm('¿Volver a los datos iniciales de la demo?')) { db = datosDeEjemplo(); guardar(); dibujar(); } }
+  else if (t.id === 'nuevoPedido') nuevoPedido();
+  else if (t.id === 'nuevoCliente') nuevoCliente();
+  else if (t.id === 'nuevoPres') nuevoPresupuesto();
+  else if (t.id === 'pr-mas') agregarItem();
+  else if (t.id === 'imprimir') window.print();
+  else if (t.id === 'np-guardar') {
+    const mueble = $('#np-mueble').value.trim(), total = Number($('#np-total').value) || 0;
+    if (!mueble || !total) return alert('Completá el mueble y el total.');
+    db.pedidos.push({ id: Math.max(...db.pedidos.map((p) => p.id)) + 1, cliente: Number($('#np-cliente').value), mueble, material: $('#np-material').value.trim(), total, pagado: Math.min(total, Number($('#np-sena').value) || 0), etapa: 0, alta: dia(0), entrega: $('#np-entrega').value || dia(21), nota: '' });
+    guardar(); cerrar(); location.hash = 'pedidos'; dibujar();
+  }
+  else if (t.id === 'nc-guardar') {
+    const nombre = $('#nc-nombre').value.trim(); if (!nombre) return;
+    db.clientes.push({ id: Math.max(...db.clientes.map((c) => c.id)) + 1, nombre, tel: $('#nc-tel').value.trim(), localidad: $('#nc-loc').value.trim() });
+    guardar(); cerrar(); dibujar();
+  }
+  else if (t.id === 'pr-guardar') {
+    const items = itemsDelForm(); if (!items.length) return alert('Agregá al menos un ítem con precio.');
+    const pr = { id: Math.max(...db.presupuestos.map((x) => x.id)) + 1, cliente: Number($('#pr-cliente').value), fecha: dia(0), estado: 'Enviado', items };
+    db.presupuestos.push(pr); guardar(); location.hash = 'presupuestos'; dibujar(); verPDF(pr.id);
+  }
+});
+document.addEventListener('input', (e) => {
+  if (e.target.closest('#pr-items')) $('#pr-total').textContent = plata(itemsDelForm().reduce((s, [, c, p]) => s + c * p, 0));
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'filtroPedidos') { try { sessionStorage.setItem('filtroPedidos', e.target.value); } catch {} dibujar(); }
+});
+dibujar();
+</script>
+</body>
+</html>
